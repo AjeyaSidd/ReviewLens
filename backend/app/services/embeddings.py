@@ -1,0 +1,137 @@
+import logging
+import time
+from google import genai
+from app.config import get_settings
+from app.database import get_supabase_client
+
+logger = logging.getLogger(__name__)
+
+
+def generate_embeddings_batch(
+    texts: list[str],
+    max_retries: int = 3,
+) -> list[list[float]]:
+    """Generate 1536-dimensional embeddings for a list of texts using Gemini API.
+    
+    Splits texts into batches of up to 100 texts to prevent API overload.
+    Includes exponential backoff and retry logic for robust production operations.
+    """
+    if not texts:
+        return []
+
+    settings = get_settings()
+    client = genai.Client(api_key=settings.gemini_api_key)
+    
+    batch_size = 100  # Safe and standard batch limit for list embeddings
+    batches = [texts[i:i + batch_size] for i in range(0, len(texts), batch_size)]
+    all_embeddings: list[list[float]] = []
+
+    logger.info(
+        "Embedding starting | total_texts=%d | batches=%d | batch_size=%d",
+        len(texts), len(batches), batch_size,
+    )
+
+    for batch_idx, batch in enumerate(batches):
+        retries = 0
+        while retries <= max_retries:
+            try:
+                # Call Gemini embedding API
+                response = client.models.embed_content(
+                    model=settings.gemini_embedding_model,
+                    contents=batch,
+                )
+                
+                # Check response has embeddings list
+                if not response.embeddings:
+                    raise ValueError("No embeddings returned in response")
+                
+                # Extract values (list of floats of size 1536) for each content
+                batch_embeddings = [emb.values for emb in response.embeddings]
+                all_embeddings.extend(batch_embeddings)
+                
+                logger.info(
+                    "Embedding batch %d/%d complete | items=%d",
+                    batch_idx + 1, len(batches), len(batch)
+                )
+                break  # Success, move to the next batch
+                
+            except Exception as e:
+                error_str = str(e)
+                # Retry on rate limits (429) or transient server errors (500/503)
+                if "429" in error_str or "500" in error_str or "503" in error_str:
+                    retries += 1
+                    wait_time = 2 ** retries
+                    logger.warning(
+                        "Embedding server error batch %d | retry %d/%d | waiting %ds | error=%s",
+                        batch_idx + 1, retries, max_retries, wait_time, error_str,
+                    )
+                    if retries > max_retries:
+                        logger.error("Embedding batch %d failed after maximum retries", batch_idx + 1)
+                        raise
+                    time.sleep(wait_time)
+                else:
+                    logger.error(
+                        "Embedding unexpected failure batch %d | error=%s",
+                        batch_idx + 1, error_str, exc_info=True,
+                    )
+                    raise  # Propagate unexpected errors immediately
+
+    return all_embeddings
+
+
+def run_embeddings(app_id: str) -> int:
+    """Generate and save Gemini vector embeddings for all reviews of an app that need it.
+    
+    Fetches reviews with text where embedding is still NULL, generates embeddings,
+    and updates them individually in Supabase.
+    """
+    db = get_supabase_client()
+    
+    # Query reviews that have body text but no embedding vector yet
+    resp = (
+        db.table("reviews")
+        .select("id, title, body")
+        .eq("catalog_app_id", app_id)
+        .is_("embedding", "null")
+        .execute()
+    )
+    
+    # Filter and construct clean review texts, enforcing 8000-character safety truncation
+    reviews_to_embed = []
+    for r in resp.data:
+        text = f"{r.get('title', '')}. {r.get('body', '')}".strip().strip(" .")
+        if text:
+            # Safe truncation: keep only the first 8000 chars to fit within the 2048-token limit
+            safe_text = text[:8000]
+            reviews_to_embed.append({
+                "id": r["id"],
+                "text": safe_text,
+            })
+            
+    if not reviews_to_embed:
+        logger.info("No reviews need vector embedding for app %s", app_id)
+        return 0
+
+    logger.info("Running embeddings for %d reviews | app=%s", len(reviews_to_embed), app_id)
+
+    # Extract clean texts list
+    texts = [item["text"] for item in reviews_to_embed]
+    
+    # Generate embeddings
+    embeddings = generate_embeddings_batch(texts)
+    
+    if len(embeddings) != len(reviews_to_embed):
+        raise ValueError(
+            f"Embedding length mismatch | expected={len(reviews_to_embed)} | received={len(embeddings)}"
+        )
+        
+    # Update Supabase reviews with their corresponding float vector list
+    updated_count = 0
+    for idx, item in enumerate(reviews_to_embed):
+        db.table("reviews").update({
+            "embedding": embeddings[idx],
+        }).eq("id", item["id"]).execute()
+        updated_count += 1
+        
+    logger.info("Successfully updated %d reviews with vectors | app=%s", updated_count, app_id)
+    return updated_count
