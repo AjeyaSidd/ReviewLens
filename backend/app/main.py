@@ -20,6 +20,7 @@ app = FastAPI(
     description="PM-facing tool to explore curated App Store and Play Store reviews with trends and natural-language Q&A.",
     version="1.0.0",
     lifespan=lifespan,
+    swagger_ui_parameters={"persistAuthorization": True},
 )
 
 # CORS
