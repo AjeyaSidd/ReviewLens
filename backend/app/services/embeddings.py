@@ -22,7 +22,7 @@ def generate_embeddings_batch(
     settings = get_settings()
     client = genai.Client(api_key=settings.gemini_api_key)
     
-    batch_size = 1000  # Increased batch limit to significantly reduce API roundtrips
+    batch_size = 100  # Enforce at most 100 requests per batch as required by Gemini API
     batches = [texts[i:i + batch_size] for i in range(0, len(texts), batch_size)]
     all_embeddings: list[list[float]] = []
 
@@ -54,10 +54,9 @@ def generate_embeddings_batch(
                     batch_idx + 1, len(batches), len(batch)
                 )
                 
-                # Strict RPM ceiling: space successful requests by 12 seconds
-                if batch_idx < len(batches) - 1:
-                    logger.info("Enforcing RPM ceiling: sleeping 12s before next request...")
-                    time.sleep(12.0)
+                # Enforce RPM ceiling: space every request by 12 seconds (protect limit across apps)
+                logger.info("Enforcing RPM ceiling: sleeping 12s...")
+                time.sleep(12.0)
                 break  # Success, move to the next batch
                 
             except Exception as e:

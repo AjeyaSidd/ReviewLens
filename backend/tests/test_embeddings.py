@@ -45,7 +45,7 @@ def test_generate_embeddings_batch_success(mock_get_settings, mock_genai):
 @patch("app.services.embeddings.genai")
 @patch("app.services.embeddings.get_settings")
 def test_generate_embeddings_multiple_batches(mock_get_settings, mock_genai, mock_time):
-    """Verify that text lists exceeding 1000 split into multiple safe chunks."""
+    """Verify that text lists exceeding 100 split into multiple safe chunks."""
     mock_settings = MagicMock()
     mock_settings.gemini_embedding_model = "gemini-embedding-001"
     mock_get_settings.return_value = mock_settings
@@ -62,13 +62,14 @@ def test_generate_embeddings_multiple_batches(mock_get_settings, mock_genai, moc
         
     mock_client.models.embed_content.side_effect = embed_content_side_effect
     
-    # 1500 texts (should yield 2 batches: 1000 items + 500 items)
-    texts = [f"Text {i}" for i in range(1500)]
+    # 150 texts (should yield 2 batches: 100 items + 50 items)
+    texts = [f"Text {i}" for i in range(150)]
     embeddings = generate_embeddings_batch(texts)
     
     assert mock_client.models.embed_content.call_count == 2
-    assert len(embeddings) == 1500
-    mock_time.sleep.assert_called_once_with(12.0)
+    assert len(embeddings) == 150
+    assert mock_time.sleep.call_count == 2
+    mock_time.sleep.assert_any_call(12.0)
 
 
 
