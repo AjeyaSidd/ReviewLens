@@ -35,10 +35,11 @@ def generate_embeddings_batch(
         retries = 0
         while retries <= max_retries:
             try:
-                # Call Gemini embedding API
+                # Call Gemini embedding API with 1536 output dimension to match Supabase schema
                 response = client.models.embed_content(
                     model=settings.gemini_embedding_model,
                     contents=batch,
+                    config=genai.types.EmbedContentConfig(output_dimensionality=1536),
                 )
                 
                 # Check response has embeddings list
@@ -132,13 +133,19 @@ def run_embeddings(app_id: str) -> int:
             f"Embedding length mismatch | expected={len(reviews_to_embed)} | received={len(embeddings)}"
         )
         
-    # Update Supabase reviews with their corresponding float vector list
-    updated_count = 0
-    for idx, item in enumerate(reviews_to_embed):
-        db.table("reviews").update({
-            "embedding": embeddings[idx],
-        }).eq("id", item["id"]).execute()
-        updated_count += 1
+    # Update Supabase reviews with their corresponding float vector list in chunks of 100
+    chunk_size = 100
+    for i in range(0, len(reviews_to_embed), chunk_size):
+        chunk = reviews_to_embed[i:i + chunk_size]
+        rows = [
+            {
+                "id": item["id"],
+                "embedding": embeddings[i + idx],
+            }
+            for idx, item in enumerate(chunk)
+        ]
+        db.table("reviews").upsert(rows).execute()
+    updated_count = len(reviews_to_embed)
         
     logger.info("Successfully updated %d reviews with vectors | app=%s", updated_count, app_id)
     return updated_count

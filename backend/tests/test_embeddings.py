@@ -35,10 +35,11 @@ def test_generate_embeddings_batch_success(mock_get_settings, mock_genai):
     assert embeddings[0][0] == 0.1
     assert embeddings[1][0] == -0.2
     
-    mock_client.models.embed_content.assert_called_once_with(
-        model="gemini-embedding-001",
-        contents=texts,
-    )
+    mock_genai.types.EmbedContentConfig.assert_called_once_with(output_dimensionality=1536)
+    call_args = mock_client.models.embed_content.call_args
+    assert call_args[1]["model"] == "gemini-embedding-001"
+    assert call_args[1]["contents"] == texts
+    assert call_args[1]["config"] == mock_genai.types.EmbedContentConfig.return_value
 
 
 @patch("app.services.embeddings.time")
@@ -54,7 +55,7 @@ def test_generate_embeddings_multiple_batches(mock_get_settings, mock_genai, moc
     mock_genai.Client.return_value = mock_client
     
     # Custom side effect to return appropriate sized list of embeddings
-    def embed_content_side_effect(model, contents):
+    def embed_content_side_effect(model, contents, config=None, **kwargs):
         batch_size = len(contents)
         response = MagicMock()
         response.embeddings = [MagicMock(values=[0.5] * 1536) for _ in range(batch_size)]
@@ -118,10 +119,12 @@ def test_run_embeddings_e2e_success(mock_generate, mock_db):
         ]
         mock_generate.assert_called_once_with(expected_texts)
         
-        # Verify db updates were called for each review
-        assert mock_db.table.return_value.update.call_count == 2
-        mock_db.table.return_value.update.assert_any_call({"embedding": dummy_emb_1})
-        mock_db.table.return_value.update.assert_any_call({"embedding": dummy_emb_2})
+        # Verify db updates were called as a bulk upsert
+        assert mock_db.table.return_value.upsert.call_count == 1
+        mock_db.table.return_value.upsert.assert_called_once_with([
+            {"id": "uuid-1", "embedding": dummy_emb_1},
+            {"id": "uuid-2", "embedding": dummy_emb_2},
+        ])
 
 
 @patch("app.services.embeddings.time")

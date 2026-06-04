@@ -151,12 +151,19 @@ def _run_sentiment(app_id: str) -> int:
     
     results = analyze_sentiment_batch(reviews_to_analyze)
     
-    # Update reviews with sentiment results
-    for result in results:
-        db.table("reviews").update({
-            "sentiment_score": result.sentiment_score,
-            "sentiment_label": result.sentiment_label,
-        }).eq("id", result.review_id).execute()
+    # Update reviews with sentiment results in chunks of 100
+    chunk_size = 100
+    for i in range(0, len(results), chunk_size):
+        chunk = results[i:i + chunk_size]
+        rows = [
+            {
+                "id": result.review_id,
+                "sentiment_score": result.sentiment_score,
+                "sentiment_label": result.sentiment_label,
+            }
+            for result in chunk
+        ]
+        db.table("reviews").upsert(rows).execute()
     
     logger.info("Sentiment updated for %d reviews | app=%s", len(results), app_id)
     return len(results)
