@@ -79,8 +79,8 @@ def test_run_embeddings_empty_or_no_text(mock_generate, mock_db):
     """Verify that rating-only or empty body reviews are completely skipped."""
     mock_resp = MagicMock()
     mock_resp.data = [
-        {"id": "r1", "title": "", "body": ""},
-        {"id": "r2", "title": "   ", "body": "   "},
+        {"id": "r1", "title": "", "body": "", "catalog_app_id": "test-app-uuid", "platform": "play_store", "platform_review_id": "r1", "rating": 5},
+        {"id": "r2", "title": "   ", "body": "   ", "catalog_app_id": "test-app-uuid", "platform": "play_store", "platform_review_id": "r2", "rating": 5},
     ]
     mock_db.table.return_value.select.return_value.eq.return_value.is_.return_value.execute.return_value = mock_resp
     
@@ -97,8 +97,8 @@ def test_run_embeddings_e2e_success(mock_generate, mock_db):
     very_long_body = "A" * 9000
     mock_resp = MagicMock()
     mock_resp.data = [
-        {"id": "uuid-1", "title": "Good", "body": "I like this app."},
-        {"id": "uuid-2", "title": "Spam", "body": very_long_body},
+        {"id": "uuid-1", "title": "Good", "body": "I like this app.", "catalog_app_id": "test-app-uuid", "platform": "play_store", "platform_review_id": "r1", "rating": 5},
+        {"id": "uuid-2", "title": "Spam", "body": very_long_body, "catalog_app_id": "test-app-uuid", "platform": "play_store", "platform_review_id": "r2", "rating": 1},
     ]
     mock_db.table.return_value.select.return_value.eq.return_value.is_.return_value.execute.return_value = mock_resp
     
@@ -122,8 +122,22 @@ def test_run_embeddings_e2e_success(mock_generate, mock_db):
         # Verify db updates were called as a bulk upsert
         assert mock_db.table.return_value.upsert.call_count == 1
         mock_db.table.return_value.upsert.assert_called_once_with([
-            {"id": "uuid-1", "embedding": dummy_emb_1},
-            {"id": "uuid-2", "embedding": dummy_emb_2},
+            {
+                "id": "uuid-1",
+                "catalog_app_id": "test-app-uuid",
+                "platform": "play_store",
+                "platform_review_id": "r1",
+                "rating": 5,
+                "embedding": dummy_emb_1,
+            },
+            {
+                "id": "uuid-2",
+                "catalog_app_id": "test-app-uuid",
+                "platform": "play_store",
+                "platform_review_id": "r2",
+                "rating": 1,
+                "embedding": dummy_emb_2,
+            },
         ])
 
 

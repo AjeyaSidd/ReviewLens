@@ -46,3 +46,56 @@ def test_analyze_sentiment_empty_input():
     """Verify empty input returns empty list immediately."""
     results = analyze_sentiment_batch([])
     assert results == []
+
+
+from unittest.mock import MagicMock, patch
+
+def test_run_sentiment_includes_empty_body_reviews(mock_db):
+    """Verify that _run_sentiment does not skip reviews with empty title/body."""
+    from app.services.sync_app import _run_sentiment
+    
+    mock_resp = MagicMock()
+    mock_resp.data = [
+        {
+            "id": "r-text",
+            "title": "Good",
+            "body": "It works well.",
+            "rating": 5,
+            "catalog_app_id": "test-app-uuid",
+            "platform": "play_store",
+            "platform_review_id": "p-text"
+        },
+        {
+            "id": "r-empty",
+            "title": "",
+            "body": "   ",
+            "rating": 2,
+            "catalog_app_id": "test-app-uuid",
+            "platform": "app_store",
+            "platform_review_id": "i-empty"
+        }
+    ]
+    mock_db.table.return_value.select.return_value.eq.return_value.is_.return_value.execute.return_value = mock_resp
+    
+    with patch("app.services.sync_app.get_supabase_client", return_value=mock_db):
+        count = _run_sentiment("test-app-uuid")
+        
+        # Verify both reviews were processed
+        assert count == 2
+        
+        # Verify bulk upsert was called with correct sentiment results
+        assert mock_db.table.return_value.upsert.call_count == 1
+        upserted_rows = mock_db.table.return_value.upsert.call_args[0][0]
+        assert len(upserted_rows) == 2
+        
+        # Row 1 (rating 5 -> positive, score 1.0)
+        row_text = next(r for r in upserted_rows if r["id"] == "r-text")
+        assert row_text["sentiment_score"] == 1.0
+        assert row_text["sentiment_label"] == "positive"
+        assert row_text["catalog_app_id"] == "test-app-uuid"
+        
+        # Row 2 (rating 2 -> negative, score -0.5)
+        row_empty = next(r for r in upserted_rows if r["id"] == "r-empty")
+        assert row_empty["sentiment_score"] == -0.5
+        assert row_empty["sentiment_label"] == "negative"
+        assert row_empty["catalog_app_id"] == "test-app-uuid"

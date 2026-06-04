@@ -98,7 +98,7 @@ def run_embeddings(app_id: str) -> int:
     # Query reviews that have body text but no embedding vector yet
     resp = (
         db.table("reviews")
-        .select("id, title, body")
+        .select("id, title, body, catalog_app_id, platform, platform_review_id, rating")
         .eq("catalog_app_id", app_id)
         .is_("embedding", "null")
         .execute()
@@ -114,6 +114,10 @@ def run_embeddings(app_id: str) -> int:
             reviews_to_embed.append({
                 "id": r["id"],
                 "text": safe_text,
+                "catalog_app_id": r["catalog_app_id"],
+                "platform": r["platform"],
+                "platform_review_id": r["platform_review_id"],
+                "rating": r["rating"],
             })
             
     if not reviews_to_embed:
@@ -140,6 +144,10 @@ def run_embeddings(app_id: str) -> int:
         rows = [
             {
                 "id": item["id"],
+                "catalog_app_id": item["catalog_app_id"],
+                "platform": item["platform"],
+                "platform_review_id": item["platform_review_id"],
+                "rating": item["rating"],
                 "embedding": embeddings[i + idx],
             }
             for idx, item in enumerate(chunk)

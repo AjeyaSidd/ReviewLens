@@ -126,22 +126,23 @@ def _run_sentiment(app_id: str) -> int:
     # Get reviews with text but no sentiment score yet
     resp = (
         db.table("reviews")
-        .select("id, title, body, rating")
+        .select("id, title, body, rating, catalog_app_id, platform, platform_review_id")
         .eq("catalog_app_id", app_id)
         .is_("sentiment_score", "null")
         .execute()
     )
     
-    # Filter to reviews that actually have text
+    # Process all reviews (even without text body) as we now calculate rating-based sentiment
     reviews_to_analyze = []
+    review_lookup = {}
     for r in resp.data:
         text = f"{r.get('title', '')}. {r.get('body', '')}".strip().strip(".")
-        if text:
-            reviews_to_analyze.append({
-                "review_id": r["id"],
-                "rating": r["rating"],
-                "text": text,
-            })
+        reviews_to_analyze.append({
+            "review_id": r["id"],
+            "rating": r["rating"],
+            "text": text,
+        })
+        review_lookup[r["id"]] = r
     
     if not reviews_to_analyze:
         logger.info("No reviews need sentiment analysis for app %s", app_id)
@@ -158,6 +159,10 @@ def _run_sentiment(app_id: str) -> int:
         rows = [
             {
                 "id": result.review_id,
+                "catalog_app_id": review_lookup[result.review_id]["catalog_app_id"],
+                "platform": review_lookup[result.review_id]["platform"],
+                "platform_review_id": review_lookup[result.review_id]["platform_review_id"],
+                "rating": review_lookup[result.review_id]["rating"],
                 "sentiment_score": result.sentiment_score,
                 "sentiment_label": result.sentiment_label,
             }
