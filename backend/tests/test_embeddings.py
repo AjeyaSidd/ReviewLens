@@ -41,10 +41,11 @@ def test_generate_embeddings_batch_success(mock_get_settings, mock_genai):
     )
 
 
+@patch("app.services.embeddings.time")
 @patch("app.services.embeddings.genai")
 @patch("app.services.embeddings.get_settings")
-def test_generate_embeddings_multiple_batches(mock_get_settings, mock_genai):
-    """Verify that text lists exceeding 100 split into multiple safe chunks."""
+def test_generate_embeddings_multiple_batches(mock_get_settings, mock_genai, mock_time):
+    """Verify that text lists exceeding 1000 split into multiple safe chunks."""
     mock_settings = MagicMock()
     mock_settings.gemini_embedding_model = "gemini-embedding-001"
     mock_get_settings.return_value = mock_settings
@@ -61,12 +62,14 @@ def test_generate_embeddings_multiple_batches(mock_get_settings, mock_genai):
         
     mock_client.models.embed_content.side_effect = embed_content_side_effect
     
-    # 150 texts (should yield 2 batches: 100 items + 50 items)
-    texts = [f"Text {i}" for i in range(150)]
+    # 1500 texts (should yield 2 batches: 1000 items + 500 items)
+    texts = [f"Text {i}" for i in range(1500)]
     embeddings = generate_embeddings_batch(texts)
     
     assert mock_client.models.embed_content.call_count == 2
-    assert len(embeddings) == 150
+    assert len(embeddings) == 1500
+    mock_time.sleep.assert_called_once_with(12.0)
+
 
 
 @patch("app.services.embeddings.generate_embeddings_batch")
@@ -118,3 +121,29 @@ def test_run_embeddings_e2e_success(mock_generate, mock_db):
         assert mock_db.table.return_value.update.call_count == 2
         mock_db.table.return_value.update.assert_any_call({"embedding": dummy_emb_1})
         mock_db.table.return_value.update.assert_any_call({"embedding": dummy_emb_2})
+
+
+@patch("app.services.embeddings.time")
+@patch("app.services.embeddings.genai")
+@patch("app.services.embeddings.get_settings")
+def test_generate_embeddings_rate_limit_retry(mock_get_settings, mock_genai, mock_time):
+    """Verify that a 429 error triggers a 60-second sleep and fails after exactly 1 retry."""
+    mock_settings = MagicMock()
+    mock_settings.gemini_embedding_model = "gemini-embedding-001"
+    mock_get_settings.return_value = mock_settings
+    
+    mock_client = MagicMock()
+    mock_genai.Client.return_value = mock_client
+    
+    # Simulate a rate limit error on all calls
+    mock_client.models.embed_content.side_effect = Exception("ResourceExhausted: 429 Too Many Requests")
+    
+    # Call generate_embeddings_batch and expect a failure
+    with pytest.raises(Exception, match="429"):
+        generate_embeddings_batch(["Sample text"])
+        
+    # The client should be called twice (initial attempt + exactly 1 retry)
+    assert mock_client.models.embed_content.call_count == 2
+    # Verify that sleep was called with 60.0 seconds to wait out the 429 limits
+    mock_time.sleep.assert_called_once_with(60.0)
+

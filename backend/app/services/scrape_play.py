@@ -35,6 +35,7 @@ def scrape_play_reviews(
     delay_between_pages: float = 1.5,
 ) -> list[NormalizedReview]:
     """Scrape reviews from Google Play Store with pagination."""
+    max_reviews = min(max_reviews, 500)
     logger.info(
         "Scraping Play Store | package=%s | country=%s | max=%d",
         package_name, country, max_reviews,

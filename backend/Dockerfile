@@ -4,7 +4,6 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir --no-deps app-store-scraper==0.3.5
 
 COPY app/ ./app/
 
