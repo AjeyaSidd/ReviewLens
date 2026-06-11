@@ -82,18 +82,16 @@ export default function ChatPanel({ appId }: { appId: string }) {
     } finally {
       setSending(false);
     }
-  };
-
-  return (
-    <div className="flex flex-col h-full border border-gray-800 rounded-2xl bg-[#121826]/40 overflow-hidden backdrop-blur-md">
+    return (
+    <div className="flex flex-col h-full border border-gray-800/80 rounded-2xl bg-[#0E1320] overflow-hidden">
       {/* Panel Header */}
-      <div className="border-b border-gray-800 bg-[#151B2C]/80 px-6 py-4 flex items-center gap-2">
+      <div className="border-b border-gray-800 bg-[#12192C] px-6 py-4 flex items-center gap-2">
         <span className="text-lg">💬</span>
         <h4 className="font-bold text-gray-200">AI Review Copilot</h4>
       </div>
 
       {/* Message Feed */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#0B0F19]/60">
         {messages.map((msg, i) => (
           <div
             key={i}
@@ -103,10 +101,10 @@ export default function ChatPanel({ appId }: { appId: string }) {
           >
             {/* Message Bubble */}
             <div
-              className={`rounded-2xl px-5 py-3.5 text-sm leading-relaxed ${
+              className={`rounded-2xl px-5 py-3 text-sm leading-relaxed ${
                 msg.sender === "user"
-                  ? "bg-indigo-600 text-gray-100 rounded-tr-none shadow-md shadow-indigo-600/10"
-                  : "bg-[#1C253B] border border-gray-800/80 text-gray-300 rounded-tl-none"
+                  ? "bg-indigo-600 text-gray-100 rounded-tr-none shadow-md shadow-indigo-600/10 border border-indigo-500/20"
+                  : "bg-[#182035] border border-gray-800 text-gray-200 rounded-tl-none"
               }`}
             >
               {msg.text}
@@ -114,7 +112,7 @@ export default function ChatPanel({ appId }: { appId: string }) {
 
             {/* RAG Metrics summary banner */}
             {msg.metrics && Object.keys(msg.metrics).length > 0 && (
-              <div className="mt-2 w-full rounded-xl bg-gray-900/60 border border-gray-800 p-3 text-xs text-gray-400 font-mono">
+              <div className="mt-2 w-full rounded-xl bg-gray-950/80 border border-gray-800/60 p-3 text-xs text-gray-400 font-mono">
                 <span className="font-bold text-indigo-400 uppercase tracking-wider block mb-1">Calculated aggregates:</span>
                 {JSON.stringify(msg.metrics, null, 2)}
               </div>
@@ -127,7 +125,7 @@ export default function ChatPanel({ appId }: { appId: string }) {
                   <button
                     key={idx}
                     onClick={() => setActiveCitation(cit)}
-                    className="flex items-center gap-2 rounded-lg border border-gray-800/60 bg-[#161C2C] hover:bg-[#1E273D] hover:border-indigo-500/30 px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 transition-all text-left"
+                    className="flex items-center gap-2 rounded-lg border border-gray-800 bg-[#121829] hover:bg-[#1C253E] hover:border-indigo-500/30 px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 transition-all text-left"
                   >
                     <span>★ {cit.rating}</span>
                     <span className="font-medium truncate max-w-[120px]">
@@ -142,7 +140,7 @@ export default function ChatPanel({ appId }: { appId: string }) {
 
         {sending && (
           <div className="flex mr-auto items-start max-w-[85%]">
-            <div className="rounded-2xl px-5 py-3.5 text-sm bg-[#1C253B] border border-gray-800/80 text-gray-400 rounded-tl-none flex items-center gap-2">
+            <div className="rounded-2xl px-5 py-3.5 text-sm bg-[#182035] border border-gray-800 text-gray-400 rounded-tl-none flex items-center gap-2">
               <span className="flex gap-1">
                 <span className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: "0ms" }} />
                 <span className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -156,8 +154,8 @@ export default function ChatPanel({ appId }: { appId: string }) {
       </div>
 
       {/* Suggestion Pills */}
-      <div className="px-6 pb-3 pt-2 border-t border-gray-800/40 bg-[#121826]/20 flex flex-wrap gap-2">
-        <span className="text-xs text-gray-500 font-semibold w-full mb-0.5">💡 Quick Prompts (Click to edit)</span>
+      <div className="px-6 pb-3 pt-2 border-t border-gray-800/40 bg-[#121829]/60 flex flex-wrap gap-2">
+        <span className="text-[10px] text-gray-500 font-bold w-full mb-0.5 uppercase tracking-wider">💡 Quick Prompts</span>
         {[
           { label: "🔴 Crashes & Bugs", text: "Are there any recent crashes or login bugs reported?" },
           { label: "💡 Feature Requests", text: "What feature requests or improvements are users asking for?" },
@@ -168,31 +166,36 @@ export default function ChatPanel({ appId }: { appId: string }) {
             key={idx}
             type="button"
             onClick={() => setInput(s.text)}
-            className="rounded-full border border-gray-800 hover:border-indigo-500/40 bg-gray-900/60 hover:bg-indigo-500/5 px-3 py-1 text-xs text-gray-400 hover:text-gray-200 transition-all font-medium"
+            className="rounded-full border border-gray-800 hover:border-indigo-500/40 bg-gray-950 hover:bg-indigo-500/5 px-2.5 py-0.5 text-xs text-gray-400 hover:text-gray-200 transition-all font-medium"
           >
             {s.label}
           </button>
         ))}
       </div>
 
-      {/* Input Form */}
-      <form onSubmit={handleSend} className="border-t border-gray-800 bg-[#151B2C]/40 p-4 flex gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about logins, UI feedback, star aggregates..."
-          disabled={sending}
-          className="flex-1 rounded-xl border border-gray-800 bg-[#0B0F19] px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:border-indigo-500/50 focus:outline-none transition-all disabled:opacity-50"
-        />
-        <button
-          type="submit"
-          disabled={sending || !input.trim()}
-          className="rounded-xl bg-indigo-600 hover:bg-indigo-500 border border-indigo-500/20 px-5 py-2.5 text-sm font-semibold text-gray-100 transition-all disabled:opacity-50 shadow-md shadow-indigo-600/10"
-        >
-          Send
-        </button>
-      </form>
+      {/* Input Form Box (Claude web client style) */}
+      <div className="border-t border-gray-800 bg-[#111726] p-4">
+        <form onSubmit={handleSend} className="relative flex items-center bg-[#1D2436] border border-gray-750 focus-within:border-gray-500 rounded-xl px-2 py-1.5 transition-all shadow-inner">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask about logins, UI feedback, star aggregates..."
+            disabled={sending}
+            className="flex-1 bg-transparent border-0 outline-none focus:outline-none focus:ring-0 px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={sending || !input.trim()}
+            className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-800 disabled:text-gray-600 text-gray-100 px-4 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 shadow-md flex-shrink-0"
+          >
+            <span>Send</span>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+            </svg>
+          </button>
+        </form>
+      </div>
 
       {/* Popup Citation modal details */}
       {activeCitation && (

@@ -133,7 +133,7 @@ export default function AppDashboardPage({ params }: { params: { id: string } })
   const fallbackLetter = app?.display_name ? app.display_name.charAt(0).toUpperCase() : "";
 
   return (
-    <div className="flex min-h-screen lg:h-screen flex-col bg-[#0B0F19] lg:overflow-hidden">
+    <div className="flex min-h-screen flex-col bg-[#0B0F19]">
       {/* Merged Header banner - compact height */}
       <header className="border-b border-gray-800 bg-[#0F1524]/80 backdrop-blur-md z-40 flex-shrink-0">
         <div className="mx-auto max-w-7xl w-full px-6 py-3 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -206,32 +206,34 @@ export default function AppDashboardPage({ params }: { params: { id: string } })
       </header>
 
       {/* Main split-screen container */}
-      <main className="flex-1 overflow-y-auto lg:overflow-hidden p-6 max-w-7xl mx-auto w-full flex flex-col min-h-0">
-        <div className="flex flex-col lg:flex-row h-full gap-6 min-h-0">
+      <main className="flex-1 p-6 max-w-7xl mx-auto w-full">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* Left panel: Filters, Rating Trend Graph, Reviews Table */}
-          <div className="w-full lg:w-1/2 flex flex-col h-full gap-4 overflow-hidden min-h-0">
+          <div className="w-full lg:col-span-6 space-y-6">
             {/* Filters */}
-            <div className="rounded-2xl border border-gray-800 bg-[#151B2C]/20 p-3 flex items-center justify-between gap-4 flex-shrink-0">
+            <div className="rounded-2xl border border-gray-800 bg-[#151B2C]/20 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-shrink-0">
               <span className="text-xs font-bold text-gray-400">Filter Historical Trends</span>
               
-              <form onSubmit={handleFilterSubmit} className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                  className="rounded-lg border border-gray-800 bg-[#0B0F19] px-2 py-1 text-[11px] font-semibold text-gray-400 focus:outline-none focus:border-indigo-500/50"
-                />
-                <span className="text-gray-600 text-xs">to</span>
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                  className="rounded-lg border border-gray-800 bg-[#0B0F19] px-2 py-1 text-[11px] font-semibold text-gray-400 focus:outline-none focus:border-indigo-500/50"
-                />
+              <form onSubmit={handleFilterSubmit} className="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="flex-1 sm:flex-none rounded-lg border border-gray-800 bg-[#0B0F19] px-2 py-1 text-[11px] font-semibold text-gray-400 focus:outline-none focus:border-indigo-500/50"
+                  />
+                  <span className="text-gray-600 text-xs flex-shrink-0">to</span>
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    className="flex-1 sm:flex-none rounded-lg border border-gray-800 bg-[#0B0F19] px-2 py-1 text-[11px] font-semibold text-gray-400 focus:outline-none focus:border-indigo-500/50"
+                  />
+                </div>
                 <button
                   type="submit"
-                  className="rounded-lg bg-indigo-600 hover:bg-indigo-500 border border-indigo-500/20 px-3 py-1 text-[11px] font-bold text-gray-100 transition-colors shadow-md shadow-indigo-600/10"
+                  className="w-full sm:w-auto rounded-lg bg-indigo-600 hover:bg-indigo-500 border border-indigo-500/20 px-3 py-1 text-[11px] font-bold text-gray-100 transition-colors shadow-md shadow-indigo-600/10"
                 >
                   Apply
                 </button>
@@ -239,7 +241,7 @@ export default function AppDashboardPage({ params }: { params: { id: string } })
             </div>
 
             {/* Daily Rating Trend Graph */}
-            <div className="flex-shrink-0">
+            <div>
               {loading ? (
                 <div className="h-72 animate-pulse rounded-2xl border border-gray-800 bg-[#151B2C]/20" />
               ) : (
@@ -248,7 +250,7 @@ export default function AppDashboardPage({ params }: { params: { id: string } })
             </div>
 
             {/* Reviews Table (Top 50 Recent Reviews) */}
-            <div className="flex-1 min-h-[200px] flex flex-col border border-gray-800 rounded-2xl bg-[#121826]/40 overflow-hidden backdrop-blur-md">
+            <div className="h-[390px] flex flex-col border border-gray-800 rounded-2xl bg-[#121826]/40 overflow-hidden backdrop-blur-md">
               <div className="border-b border-gray-800 bg-[#151B2C]/80 px-4 py-3 flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-2">
                   <span className="text-base">📝</span>
@@ -317,7 +319,7 @@ export default function AppDashboardPage({ params }: { params: { id: string } })
           </div>
 
           {/* Right panel: Chat UI */}
-          <div className="w-full lg:w-1/2 h-[600px] lg:h-full overflow-hidden min-h-0 flex flex-col flex-shrink-0">
+          <div className="w-full lg:col-span-6 h-[600px] lg:h-[880px] flex flex-col">
             <ChatPanel appId={appId} />
           </div>
         </div>
