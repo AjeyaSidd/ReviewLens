@@ -343,5 +343,4 @@ export default function AppDashboardPage({ params }: { params: { id: string } })
       </footer>
     </div>
   );
-  );
 }
