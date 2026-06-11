@@ -22,7 +22,7 @@ def generate_embeddings_batch(
     settings = get_settings()
     client = genai.Client(api_key=settings.gemini_embedding_api_key)
     
-    batch_size = 100  # Enforce at most 100 requests per batch as required by Gemini API
+    batch_size = settings.gemini_embedding_batch_size
     batches = [texts[i:i + batch_size] for i in range(0, len(texts), batch_size)]
     all_embeddings: list[list[float]] = []
 

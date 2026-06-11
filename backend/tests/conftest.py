@@ -26,6 +26,7 @@ def mock_settings():
     settings.max_active_apps = 15
     settings.max_reviews_per_app = 500
     settings.gemini_sentiment_batch_size = 30
+    settings.gemini_embedding_batch_size = 100
     settings.gemini_sentiment_model = "gemini-2.0-flash"
     settings.cors_origins = "http://localhost:3000"
     settings.cors_origin_list = ["http://localhost:3000"]

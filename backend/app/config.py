@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     gemini_sentiment_model: str = "gemini-2.0-flash"
     gemini_embedding_model: str = "gemini-embedding-001"
     gemini_embedding_dimensions: int = 1536
+    gemini_embedding_batch_size: int = 100
     cors_origins: str = "http://localhost:3000"
     log_dir: str = "backend/logs"
     log_level: str = "INFO"

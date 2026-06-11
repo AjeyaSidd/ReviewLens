@@ -11,6 +11,7 @@ def test_generate_embeddings_batch_success(mock_get_settings, mock_genai):
     mock_settings = MagicMock()
     mock_settings.gemini_embedding_model = "gemini-embedding-001"
     mock_settings.gemini_embedding_api_key = "test-gemini-embedding-key"
+    mock_settings.gemini_embedding_batch_size = 100
     mock_get_settings.return_value = mock_settings
     
     # Mock genai Client
@@ -52,6 +53,7 @@ def test_generate_embeddings_multiple_batches(mock_get_settings, mock_genai, moc
     mock_settings = MagicMock()
     mock_settings.gemini_embedding_model = "gemini-embedding-001"
     mock_settings.gemini_embedding_api_key = "test-gemini-embedding-key"
+    mock_settings.gemini_embedding_batch_size = 100
     mock_get_settings.return_value = mock_settings
     
     mock_client = MagicMock()
@@ -152,6 +154,7 @@ def test_generate_embeddings_rate_limit_retry(mock_get_settings, mock_genai, moc
     mock_settings = MagicMock()
     mock_settings.gemini_embedding_model = "gemini-embedding-001"
     mock_settings.gemini_embedding_api_key = "test-gemini-embedding-key"
+    mock_settings.gemini_embedding_batch_size = 100
     mock_get_settings.return_value = mock_settings
     
     mock_client = MagicMock()
