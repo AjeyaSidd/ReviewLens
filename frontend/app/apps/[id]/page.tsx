@@ -15,6 +15,7 @@ interface AppMetadata {
   review_count: number;
   last_synced_at?: string;
   app_icon_url?: string;
+  scrape_status?: string;
 }
 
 interface Review {
@@ -207,6 +208,12 @@ export default function AppDashboardPage({ params }: { params: { id: string } })
 
       {/* Main split-screen container */}
       <main className="flex-1 p-6 max-w-7xl mx-auto w-full">
+        {app && app.scrape_status && app.scrape_status !== "ready" && (
+          <div className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-center text-sm text-amber-400">
+            <span className="mr-2">⚠️</span>
+            This app is currently in <strong>{app.scrape_status}</strong> status. Please wait for the sync to finish or run a sync in the admin panel to populate metrics.
+          </div>
+        )}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* Left panel: Filters, Rating Trend Graph, Reviews Table */}

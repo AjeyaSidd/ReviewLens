@@ -10,6 +10,7 @@ interface AppData {
   review_count: number;
   last_synced_at?: string;
   app_icon_url?: string;
+  scrape_status?: string;
 }
 
 export default function CatalogCard({ app }: { app: AppData }) {
@@ -27,9 +28,20 @@ export default function CatalogCard({ app }: { app: AppData }) {
     <Link href={`/apps/${app.id}`}>
       <div className="group relative block rounded-2xl border border-gray-800 bg-[#151B2C] p-6 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-indigo-500/50 hover:bg-[#1C253B] hover:shadow-indigo-500/10">
         
-        {/* Flag & Country badge */}
-        <div className="absolute right-6 top-6 rounded-md bg-gray-900 border border-gray-800 px-2 py-0.5 text-xs text-gray-400 font-semibold uppercase tracking-wider">
-          🇮🇳 {app.country}
+        {/* Flag, Country, & Scrape Status badges */}
+        <div className="absolute right-6 top-6 flex items-center gap-2">
+          {app.scrape_status && app.scrape_status !== "ready" && (
+            <span className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+              app.scrape_status === "failed" ? "bg-red-500/10 border-red-500/30 text-red-400" :
+              app.scrape_status === "running" ? "bg-amber-500/10 border-amber-500/30 text-amber-400 animate-pulse" :
+              "bg-gray-500/10 border-gray-500/30 text-gray-400"
+            }`}>
+              {app.scrape_status === "running" ? "Syncing" : app.scrape_status}
+            </span>
+          )}
+          <div className="rounded-md bg-gray-900 border border-gray-800 px-2 py-0.5 text-xs text-gray-400 font-semibold uppercase tracking-wider">
+            🇮🇳 {app.country}
+          </div>
         </div>
 
         {/* Logo and Title */}

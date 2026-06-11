@@ -14,12 +14,11 @@ router = APIRouter(tags=["public"])
 
 @router.get("/catalog")
 async def list_catalog(db=Depends(get_db)):
-    """List active, ready apps for public consumption."""
+    """List active apps for public consumption."""
     result = (
         db.table("catalog_apps")
-        .select("id, display_name, country, play_package, ios_app_id, review_count, last_synced_at, app_icon_url")
+        .select("id, display_name, country, play_package, ios_app_id, review_count, last_synced_at, app_icon_url, scrape_status")
         .eq("is_active", True)
-        .eq("scrape_status", "ready")
         .order("display_name")
         .execute()
     )
@@ -28,13 +27,12 @@ async def list_catalog(db=Depends(get_db)):
 
 @router.get("/apps/{app_id}")
 async def get_app(app_id: str, db=Depends(get_db)):
-    """Get a single app's metadata (only if active and ready)."""
+    """Get a single app's metadata (only if active)."""
     result = (
         db.table("catalog_apps")
         .select("*")
         .eq("id", app_id)
         .eq("is_active", True)
-        .eq("scrape_status", "ready")
         .execute()
     )
     

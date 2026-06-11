@@ -12,6 +12,7 @@ interface AppData {
   review_count: number;
   last_synced_at?: string;
   app_icon_url?: string;
+  scrape_status?: string;
 }
 
 export default function HomePage() {
@@ -44,30 +45,30 @@ export default function HomePage() {
     <div className="flex min-h-screen flex-col bg-[#0B0F19]">
       {/* Header */}
       <header className="border-b border-gray-800 bg-[#0F1524]/60 backdrop-blur-md sticky top-0 z-40">
-        <div className="mx-auto max-w-7xl px-6 py-4 flex justify-between items-center">
+        <div className="mx-auto max-w-7xl px-6 py-2.5 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🧠</span>
-            <h1 className="text-xl font-black bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent tracking-tight">
+            <span className="text-xl">🧠</span>
+            <h1 className="text-lg font-black bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent tracking-tight">
               APP REVIEW INTELLIGENCE
             </h1>
           </div>
-          <div className="text-sm text-gray-500 font-medium">
+          <div className="text-xs text-gray-500 font-medium">
             Product Dashboard (v1.0)
           </div>
         </div>
       </header>
 
       {/* Main content */}
-      <main className="flex-1 mx-auto max-w-7xl w-full px-6 py-12">
+      <main className="flex-1 mx-auto max-w-7xl w-full px-6 py-6">
         {/* Hero Section */}
-        <section className="mb-16 text-center max-w-3xl mx-auto">
-          <h2 className="text-4xl md:text-5xl font-black text-gray-100 tracking-tight leading-tight">
+        <section className="mb-8 text-center max-w-2xl mx-auto">
+          <h2 className="text-2xl md:text-3xl font-black text-gray-100 tracking-tight leading-tight">
             Explore Curated App Store & Google Play reviews with{" "}
             <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 bg-clip-text text-transparent">
               AI Chat
             </span>
           </h2>
-          <p className="mt-4 text-lg text-gray-400 font-medium leading-relaxed">
+          <p className="mt-2 text-sm text-gray-400 font-medium leading-relaxed">
             Quickly monitor rating and sentiment trends, analyze user experience aggregates, and ask natural-language questions with immediate verified citations.
           </p>
         </section>
