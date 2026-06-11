@@ -46,11 +46,11 @@ export default function TrendCharts({ data }: { data: RollupData[] }) {
   }
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-6">
       {/* Chart 1: Daily Rating Trend */}
       <div className="rounded-2xl border border-gray-800 bg-[#151B2C]/30 p-6">
         <h4 className="mb-6 text-lg font-bold text-gray-300">Daily Rating Trend</h4>
-        <div className="h-72 w-full">
+        <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
@@ -71,32 +71,6 @@ export default function TrendCharts({ data }: { data: RollupData[] }) {
                 activeDot={{ r: 6 }}
               />
             </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Chart 2: Daily Sentiment score */}
-      <div className="rounded-2xl border border-gray-800 bg-[#151B2C]/30 p-6">
-        <h4 className="mb-6 text-lg font-bold text-gray-300">Daily Sentiment Scores (-1.0 to 1.0)</h4>
-        <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
-              <XAxis dataKey="displayDate" stroke="#9CA3AF" fontSize={11} tickLine={false} />
-              <YAxis stroke="#9CA3AF" fontSize={11} domain={[-1, 1]} tickCount={5} tickLine={false} />
-              <Tooltip
-                contentStyle={{ backgroundColor: "#151B2C", borderColor: "#374151", borderRadius: "12px" }}
-                labelStyle={{ fontWeight: "bold", color: "#9CA3AF" }}
-              />
-              <Legend verticalAlign="top" height={36} iconType="rect" />
-              <Bar
-                name="Avg Sentiment"
-                dataKey="sentiment"
-                fill="#10B981"
-                radius={[4, 4, 0, 0]}
-                maxBarSize={48}
-              />
-            </BarChart>
           </ResponsiveContainer>
         </div>
       </div>

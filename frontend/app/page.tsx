@@ -11,6 +11,7 @@ interface AppData {
   ios_app_id?: string;
   review_count: number;
   last_synced_at?: string;
+  app_icon_url?: string;
 }
 
 export default function HomePage() {

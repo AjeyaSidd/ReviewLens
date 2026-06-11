@@ -85,7 +85,7 @@ export default function ChatPanel({ appId }: { appId: string }) {
   };
 
   return (
-    <div className="flex flex-col h-[700px] border border-gray-800 rounded-2xl bg-[#121826]/40 overflow-hidden backdrop-blur-md">
+    <div className="flex flex-col h-full border border-gray-800 rounded-2xl bg-[#121826]/40 overflow-hidden backdrop-blur-md">
       {/* Panel Header */}
       <div className="border-b border-gray-800 bg-[#151B2C]/80 px-6 py-4 flex items-center gap-2">
         <span className="text-lg">💬</span>

@@ -16,7 +16,7 @@ async def list_catalog(db=Depends(get_db)):
     """List active, ready apps for public consumption."""
     result = (
         db.table("catalog_apps")
-        .select("id, display_name, country, play_package, ios_app_id, review_count, last_synced_at")
+        .select("id, display_name, country, play_package, ios_app_id, review_count, last_synced_at, app_icon_url")
         .eq("is_active", True)
         .eq("scrape_status", "ready")
         .order("display_name")

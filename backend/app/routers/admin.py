@@ -38,6 +38,7 @@ async def add_app(body: CatalogAppCreate, db=Depends(get_db)):
         "country": body.country,
         "play_package": body.play_package,
         "ios_app_id": body.ios_app_id,
+        "app_icon_url": body.app_icon_url,
         "is_active": True,
         "scrape_status": "pending",
     }

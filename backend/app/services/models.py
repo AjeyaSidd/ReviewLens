@@ -35,6 +35,7 @@ class CatalogAppCreate(BaseModel):
     country: str = "in"
     play_package: Optional[str] = None
     ios_app_id: Optional[str] = None
+    app_icon_url: Optional[str] = None
 
     @model_validator(mode="after")
     def at_least_one_store(self):
@@ -49,6 +50,7 @@ class CatalogAppResponse(BaseModel):
     country: str
     play_package: Optional[str] = None
     ios_app_id: Optional[str] = None
+    app_icon_url: Optional[str] = None
     is_active: bool
     scrape_status: str
     last_synced_at: Optional[datetime] = None
