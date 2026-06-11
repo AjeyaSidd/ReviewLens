@@ -82,7 +82,9 @@ export default function ChatPanel({ appId }: { appId: string }) {
     } finally {
       setSending(false);
     }
-    return (
+  };
+
+  return (
     <div className="flex flex-col h-full border border-gray-800/80 rounded-2xl bg-[#0E1320] overflow-hidden">
       {/* Panel Header */}
       <div className="border-b border-gray-800 bg-[#12192C] px-6 py-4 flex items-center gap-2">
