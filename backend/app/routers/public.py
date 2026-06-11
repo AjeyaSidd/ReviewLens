@@ -115,13 +115,28 @@ async def get_recent_reviews(
         # Fetch reviews
         result = (
             db.table("reviews")
-            .select("id, platform, rating, title, body, sentiment, review_date")
+            .select("id, platform, rating, title, body, sentiment_label, sentiment_score, review_date")
             .eq("catalog_app_id", app_id)
             .order("review_date", desc=True)
             .range(offset, offset + limit - 1)
             .execute()
         )
-        return result.data or []
+        
+        # Map sentiment_label/sentiment key to uppercase sentiment format expected by the frontend
+        reviews = []
+        for r in (result.data or []):
+            label = r.get("sentiment_label") or r.get("sentiment")
+            sentiment_upper = label.upper() if label else None
+            reviews.append({
+                "id": r["id"],
+                "platform": r["platform"],
+                "rating": r["rating"],
+                "title": r["title"],
+                "body": r["body"],
+                "sentiment": sentiment_upper,
+                "review_date": r["review_date"],
+            })
+        return reviews
     except Exception as e:
         logger.error("Failed to retrieve recent reviews | app_id=%s | error=%s", app_id, str(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch recent reviews")
