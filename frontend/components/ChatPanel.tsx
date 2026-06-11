@@ -148,7 +148,7 @@ export default function ChatPanel({ appId }: { appId: string }) {
                 <span className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: "150ms" }} />
                 <span className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: "300ms" }} />
               </span>
-              Copilot is analyzing reviews...
+              ReviewLens is analyzing reviews...
             </div>
           </div>
         )}
