@@ -10,6 +10,7 @@ def test_generate_embeddings_batch_success(mock_get_settings, mock_genai):
     # Mock config settings
     mock_settings = MagicMock()
     mock_settings.gemini_embedding_model = "gemini-embedding-001"
+    mock_settings.gemini_embedding_api_key = "test-gemini-embedding-key"
     mock_get_settings.return_value = mock_settings
     
     # Mock genai Client
@@ -35,6 +36,7 @@ def test_generate_embeddings_batch_success(mock_get_settings, mock_genai):
     assert embeddings[0][0] == 0.1
     assert embeddings[1][0] == -0.2
     
+    mock_genai.Client.assert_called_once_with(api_key="test-gemini-embedding-key")
     mock_genai.types.EmbedContentConfig.assert_called_once_with(output_dimensionality=1536)
     call_args = mock_client.models.embed_content.call_args
     assert call_args[1]["model"] == "gemini-embedding-001"
@@ -49,6 +51,7 @@ def test_generate_embeddings_multiple_batches(mock_get_settings, mock_genai, moc
     """Verify that text lists exceeding 100 split into multiple safe chunks."""
     mock_settings = MagicMock()
     mock_settings.gemini_embedding_model = "gemini-embedding-001"
+    mock_settings.gemini_embedding_api_key = "test-gemini-embedding-key"
     mock_get_settings.return_value = mock_settings
     
     mock_client = MagicMock()
@@ -148,6 +151,7 @@ def test_generate_embeddings_rate_limit_retry(mock_get_settings, mock_genai, moc
     """Verify that a 429 error triggers a 60-second sleep and fails after exactly 1 retry."""
     mock_settings = MagicMock()
     mock_settings.gemini_embedding_model = "gemini-embedding-001"
+    mock_settings.gemini_embedding_api_key = "test-gemini-embedding-key"
     mock_get_settings.return_value = mock_settings
     
     mock_client = MagicMock()

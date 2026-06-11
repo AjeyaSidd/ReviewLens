@@ -3,6 +3,7 @@ import os
 os.environ["SUPABASE_URL"] = "https://test.supabase.co"
 os.environ["SUPABASE_SERVICE_ROLE_KEY"] = "test-key"
 os.environ["GEMINI_API_KEY"] = "test-gemini-key"
+os.environ["GEMINI_EMBEDDING_API_KEY"] = "test-gemini-embedding-key"
 os.environ["ADMIN_API_KEY"] = "test-admin-key"
 
 
@@ -20,6 +21,7 @@ def mock_settings():
     settings.supabase_url = "https://test.supabase.co"
     settings.supabase_service_role_key = "test-key"
     settings.gemini_api_key = "test-gemini-key"
+    settings.gemini_embedding_api_key = "test-gemini-embedding-key"
     settings.admin_api_key = "test-admin-key"
     settings.max_active_apps = 15
     settings.max_reviews_per_app = 2000

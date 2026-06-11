@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_service_role_key: str
     gemini_api_key: str
+    gemini_embedding_api_key: str
     admin_api_key: str
     max_active_apps: int = 15
     max_reviews_per_app: int = 2000
