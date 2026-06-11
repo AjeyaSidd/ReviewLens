@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from datetime import date
 from typing import Optional
 from pydantic import BaseModel
@@ -82,14 +83,16 @@ async def chat_with_reviews(
 ):
     """Ask a natural-language question about review trends or user experiences."""
     # First verify that the app exists and is active
-    app_resp = db.table("catalog_apps").select("id, is_active").eq("id", app_id).single().execute()
+    app_resp = await asyncio.to_thread(
+        db.table("catalog_apps").select("id, is_active").eq("id", app_id).single().execute
+    )
     if not app_resp.data:
         raise HTTPException(status_code=404, detail="App not found")
     if not app_resp.data.get("is_active"):
         raise HTTPException(status_code=404, detail="App is not active")
 
     try:
-        response = run_hybrid_rag(app_id, body.message)
+        response = await run_hybrid_rag(app_id, body.message)
         return response
     except Exception as e:
         logger.error("Chat RAG pipeline failed | app_id=%s | error=%s", app_id, str(e), exc_info=True)

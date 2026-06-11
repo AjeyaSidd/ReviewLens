@@ -22,7 +22,7 @@ export default function ChatPanel({ appId }: { appId: string }) {
   const [messages, setMessages] = useState<Message[]>([
     {
       sender: "assistant",
-      text: "Hello! I am your App Review Intelligence assistant. Ask me anything about user experience feedback or recent trend rollups!",
+      text: "Greetings! I can help you identify key user pain points, track feature requests, spot emerging issues, and compare feedback across platforms and time periods. What would you like to explore?",
     },
   ]);
   const [input, setInput] = useState<string>("");
@@ -89,7 +89,7 @@ export default function ChatPanel({ appId }: { appId: string }) {
       {/* Panel Header */}
       <div className="border-b border-gray-800 bg-[#12192C] px-6 py-4 flex items-center gap-2">
         <span className="text-lg">💬</span>
-        <h4 className="font-bold text-gray-200">AI Review Copilot</h4>
+        <h4 className="font-bold text-gray-200">ReviewLens</h4>
       </div>
 
       {/* Message Feed */}
