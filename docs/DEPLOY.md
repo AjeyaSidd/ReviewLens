@@ -42,9 +42,10 @@ Before deploying, collect the following environment variables:
    * Copy the **`service_role` secret** (`SUPABASE_SERVICE_ROLE_KEY`). 
      > [!IMPORTANT]
      > Use the `service_role` key instead of the `anon` key. The backend needs full read/write privileges to insert reviews, manage sentiment scores, and perform low-level vector searches. Keep this key strictly confidential.
-2. **Gemini API Key**:
+2. **Gemini API Keys**:
    * Visit [Google AI Studio](https://aistudio.google.com/).
-   * Click **Get API Key** and generate a standard API key.
+   * Click **Get API Key** and generate your standard API key for chat/LLM responses (`GEMINI_API_KEY`).
+   * Generate/create another distinct API key for embedding calculations (`GEMINI_EMBEDDING_API_KEY`).
 3. **Admin API Key**:
    * Generate a secure random string (e.g., using `openssl rand -hex 32` or a password manager) to act as your `X-Admin-Key` for administrative tasks.
 
@@ -58,6 +59,7 @@ Create a production environment template. Copy `.env.example` to `.env` locally 
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 GEMINI_API_KEY=AIzaSy...
+GEMINI_EMBEDDING_API_KEY=AIzaSy...
 ADMIN_API_KEY=your-secure-admin-secret-key
 MAX_ACTIVE_APPS=15
 MAX_REVIEWS_PER_APP=2000

@@ -24,7 +24,7 @@ def mock_settings():
     settings.gemini_embedding_api_key = "test-gemini-embedding-key"
     settings.admin_api_key = "test-admin-key"
     settings.max_active_apps = 15
-    settings.max_reviews_per_app = 2000
+    settings.max_reviews_per_app = 500
     settings.gemini_sentiment_batch_size = 30
     settings.gemini_sentiment_model = "gemini-2.0-flash"
     settings.cors_origins = "http://localhost:3000"

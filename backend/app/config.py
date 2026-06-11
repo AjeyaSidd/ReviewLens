@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     gemini_embedding_api_key: str
     admin_api_key: str
     max_active_apps: int = 15
-    max_reviews_per_app: int = 2000
+    max_reviews_per_app: int = 500
     gemini_sentiment_batch_size: int = 30
     gemini_sentiment_model: str = "gemini-2.0-flash"
     gemini_embedding_model: str = "gemini-embedding-001"

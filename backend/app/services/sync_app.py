@@ -60,62 +60,89 @@ def _upsert_reviews(app_id: str, reviews: list[NormalizedReview]) -> int:
     return upserted
 
 
-def _prune_reviews(app_id: str, max_reviews: int) -> int:
-    """Prune reviews to keep only the max_reviews most recent by review_date.
-    Returns number of deleted rows."""
+def _prune_reviews(
+    app_id: str,
+    max_reviews: int,
+    play_provided: bool = False,
+    ios_provided: bool = False,
+) -> int:
+    """Prune reviews for app_id in the database to maintain a total cap of max_reviews.
+    
+    Rules:
+    1. If BOTH stores provided reviews in the current sync:
+       - Keep the newest max_reviews // 2 reviews from play_store.
+       - Keep the newest max_reviews // 2 reviews from app_store.
+    2. If ONLY play_store provided reviews (or only play_store exists):
+       - Keep the newest max_reviews reviews for this app (favoring play_store).
+    3. If ONLY app_store provided reviews (or only app_store exists):
+       - Keep the newest max_reviews reviews for this app (favoring app_store).
+    4. If NEITHER store provided reviews (e.g. no new reviews or network errors):
+       - Fallback: if reviews exist for both platforms in DB, keep up to max_reviews // 2 from each.
+       - Otherwise, keep up to max_reviews newest reviews overall.
+    """
     db = get_supabase_client()
     
-    # Get total count
-    count_resp = db.table("reviews").select("id", count="exact").eq("catalog_app_id", app_id).execute()
-    total = count_resp.count if count_resp.count else 0
-    
-    if total <= max_reviews:
-        logger.info("Prune skipped | app=%s | total=%d <= max=%d", app_id, total, max_reviews)
-        return 0
-    
-    # Get the cutoff date: the review_date of the Nth most recent review
-    cutoff_resp = (
+    # Fetch all reviews for this app
+    resp = (
         db.table("reviews")
-        .select("id, review_date")
-        .eq("catalog_app_id", app_id)
-        .order("review_date", desc=True)
-        .range(max_reviews, max_reviews)  # 0-indexed, get the one at position max_reviews
-        .execute()
-    )
-    
-    if not cutoff_resp.data:
-        return 0
-    
-    # Get IDs of reviews to keep (the most recent max_reviews)
-    keep_resp = (
-        db.table("reviews")
-        .select("id")
-        .eq("catalog_app_id", app_id)
-        .order("review_date", desc=True)
-        .limit(max_reviews)
-        .execute()
-    )
-    
-    keep_ids = {r["id"] for r in keep_resp.data}
-    
-    # Get all IDs for this app
-    all_resp = (
-        db.table("reviews")
-        .select("id")
+        .select("id, platform, review_date")
         .eq("catalog_app_id", app_id)
         .execute()
     )
+    all_reviews = resp.data or []
     
-    delete_ids = [r["id"] for r in all_resp.data if r["id"] not in keep_ids]
+    play_reviews = [r for r in all_reviews if r["platform"] == "play_store"]
+    ios_reviews = [r for r in all_reviews if r["platform"] == "app_store"]
+    
+    def get_date_key(r):
+        return r.get("review_date") or ""
+        
+    play_reviews.sort(key=get_date_key, reverse=True)
+    ios_reviews.sort(key=get_date_key, reverse=True)
+    
+    half_limit = max_reviews // 2
+    keep_ids = set()
+    
+    if play_provided and ios_provided:
+        # Keep top half_limit from each
+        keep_ids.update(r["id"] for r in play_reviews[:half_limit])
+        keep_ids.update(r["id"] for r in ios_reviews[:half_limit])
+    elif play_provided and not ios_provided:
+        # Only play store provided reviews. Keep up to max_reviews play store reviews.
+        # Fill remaining slots with newest app store reviews.
+        play_keep = play_reviews[:max_reviews]
+        ios_keep = ios_reviews[:(max_reviews - len(play_keep))]
+        keep_ids.update(r["id"] for r in play_keep)
+        keep_ids.update(r["id"] for r in ios_keep)
+    elif ios_provided and not play_provided:
+        # Only app store provided reviews. Keep up to max_reviews app store reviews.
+        # Fill remaining slots with newest play store reviews.
+        ios_keep = ios_reviews[:max_reviews]
+        play_keep = play_reviews[:(max_reviews - len(ios_keep))]
+        keep_ids.update(r["id"] for r in ios_keep)
+        keep_ids.update(r["id"] for r in play_keep)
+    else:
+        # Neither store provided reviews in this sync.
+        # Check if both have reviews in the database.
+        if play_reviews and ios_reviews:
+            # Maintain balance: keep top half_limit from each
+            keep_ids.update(r["id"] for r in play_reviews[:half_limit])
+            keep_ids.update(r["id"] for r in ios_reviews[:half_limit])
+        else:
+            # Only one has reviews, or both empty. Keep top max_reviews overall.
+            merged = play_reviews + ios_reviews
+            merged.sort(key=get_date_key, reverse=True)
+            keep_ids.update(r["id"] for r in merged[:max_reviews])
+            
+    delete_ids = [r["id"] for r in all_reviews if r["id"] not in keep_ids]
     
     if delete_ids:
-        # Delete in batches
         for i in range(0, len(delete_ids), 100):
             batch = delete_ids[i:i + 100]
             db.table("reviews").delete().in_("id", batch).execute()
-    
+            
     deleted = len(delete_ids)
-    logger.info("Pruned %d reviews for app %s (kept %d)", deleted, app_id, max_reviews)
+    logger.info("Pruned %d reviews for app %s (kept %d)", deleted, app_id, len(keep_ids))
     return deleted
 
 
@@ -218,13 +245,22 @@ async def sync_app(app_id: str) -> None:
         
         all_reviews: list[NormalizedReview] = []
         
+        # Determine scraper limits dynamically
+        has_play = bool(app_data.get("play_package"))
+        has_ios = bool(app_data.get("ios_app_id"))
+        
+        # On each sync run, try to get max_reviews_per_app // 2 reviews from each store
+        play_limit = settings.max_reviews_per_app // 2 if has_play else 0
+        ios_limit = settings.max_reviews_per_app // 2 if has_ios else 0
+        
         # Step 2: Scrape Play Store
-        if app_data.get("play_package"):
+        play_reviews = []
+        if has_play:
             try:
                 play_reviews = scrape_play_reviews(
                     package_name=app_data["play_package"],
                     country=app_data.get("country", "in"),
-                    max_reviews=settings.max_reviews_per_app,
+                    max_reviews=play_limit,
                 )
                 all_reviews.extend(play_reviews)
                 logger.info("Play Store reviews: %d | app_id=%s", len(play_reviews), app_id)
@@ -232,13 +268,14 @@ async def sync_app(app_id: str) -> None:
                 logger.error("Play Store scrape failed for app %s: %s", app_id, str(e), exc_info=True)
         
         # Step 3: Scrape App Store
-        if app_data.get("ios_app_id"):
+        ios_reviews = []
+        if has_ios:
             try:
                 ios_reviews = scrape_ios_reviews(
                     app_name=app_data.get("display_name", ""),
                     app_id=app_data["ios_app_id"],
                     country=app_data.get("country", "in"),
-                    max_reviews=settings.max_reviews_per_app,
+                    max_reviews=ios_limit,
                 )
                 all_reviews.extend(ios_reviews)
                 logger.info("App Store reviews: %d | app_id=%s", len(ios_reviews), app_id)
@@ -248,11 +285,19 @@ async def sync_app(app_id: str) -> None:
         if not all_reviews:
             logger.warning("No reviews scraped for app %s", app_id)
         
+        play_provided = len(play_reviews) > 0
+        ios_provided = len(ios_reviews) > 0
+        
         # Step 4: Upsert reviews
         upserted = _upsert_reviews(app_id, all_reviews)
         
         # Step 5: Prune to max
-        pruned = _prune_reviews(app_id, settings.max_reviews_per_app)
+        pruned = _prune_reviews(
+            app_id,
+            max_reviews=settings.max_reviews_per_app,
+            play_provided=play_provided,
+            ios_provided=ios_provided,
+        )
         
         # Step 6: Sentiment analysis
         sentiment_count = _run_sentiment(app_id)
