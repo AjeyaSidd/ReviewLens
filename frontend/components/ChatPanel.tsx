@@ -3,6 +3,69 @@
 import React, { useState, useRef, useEffect } from "react";
 import ReviewModal from "./ReviewModal";
 
+function parseInline(text: string): React.ReactNode[] {
+  const parts = text.split(/\*\*([^*]+)\*\*/g);
+  return parts.map((part, i) => {
+    if (i % 2 === 1) {
+      return (
+        <strong key={i} className="font-extrabold text-white">
+          {part}
+        </strong>
+      );
+    }
+    return part;
+  });
+}
+
+function renderMarkdown(text: string): React.ReactNode {
+  const lines = text.split("\n");
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line, index) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("### ")) {
+          return (
+            <h5 key={index} className="text-sm font-bold text-indigo-400 mt-3 mb-1">
+              {parseInline(trimmed.substring(4))}
+            </h5>
+          );
+        }
+        if (trimmed.startsWith("## ")) {
+          return (
+            <h4 key={index} className="text-base font-bold text-indigo-400 mt-4 mb-1.5">
+              {parseInline(trimmed.substring(3))}
+            </h4>
+          );
+        }
+        if (trimmed.startsWith("# ")) {
+          return (
+            <h3 key={index} className="text-lg font-extrabold text-indigo-400 mt-4 mb-2">
+              {parseInline(trimmed.substring(2))}
+            </h3>
+          );
+        }
+        if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+          return (
+            <div key={index} className="flex items-start gap-2 ml-3 text-gray-200">
+              <span className="text-indigo-500 select-none mt-1.5 text-[6px]">●</span>
+              <span className="flex-1">{parseInline(trimmed.substring(2))}</span>
+            </div>
+          );
+        }
+        if (trimmed === "") {
+          return <div key={index} className="h-1" />;
+        }
+        return (
+          <p key={index} className="text-gray-200">
+            {parseInline(line)}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+
 interface Citation {
   review_id: string;
   platform: string;
@@ -109,7 +172,7 @@ export default function ChatPanel({ appId }: { appId: string }) {
                   : "bg-[#182035] border border-gray-800 text-gray-200 rounded-tl-none"
               }`}
             >
-              {msg.text}
+              {msg.sender === "user" ? msg.text : renderMarkdown(msg.text)}
             </div>
 
             {/* RAG Metrics summary banner */}

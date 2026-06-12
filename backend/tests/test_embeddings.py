@@ -163,12 +163,56 @@ def test_generate_embeddings_rate_limit_retry(mock_get_settings, mock_genai, moc
     # Simulate a rate limit error on all calls
     mock_client.models.embed_content.side_effect = Exception("ResourceExhausted: 429 Too Many Requests")
     
-    # Call generate_embeddings_batch and expect a failure
-    with pytest.raises(Exception, match="429"):
-        generate_embeddings_batch(["Sample text"])
+    # Call generate_embeddings_batch and verify it returns an empty list on failure
+    result = generate_embeddings_batch(["Sample text"])
+    assert result == []
         
     # The client should be called twice (initial attempt + exactly 1 retry)
     assert mock_client.models.embed_content.call_count == 2
     # Verify that sleep was called with 60.0 seconds to wait out the 429 limits
     mock_time.sleep.assert_called_once_with(60.0)
+
+
+@patch("app.services.embeddings.generate_embeddings_batch")
+def test_run_embeddings_partial_success(mock_generate, mock_db):
+    """Verify that if only some embeddings succeed, only those are saved as a block."""
+    mock_resp = MagicMock()
+    mock_resp.data = [
+        {"id": "uuid-1", "title": "G1", "body": "B1", "catalog_app_id": "app-x", "platform": "play_store", "platform_review_id": "r1", "rating": 5},
+        {"id": "uuid-2", "title": "G2", "body": "B2", "catalog_app_id": "app-x", "platform": "play_store", "platform_review_id": "r2", "rating": 4},
+        {"id": "uuid-3", "title": "G3", "body": "B3", "catalog_app_id": "app-x", "platform": "play_store", "platform_review_id": "r3", "rating": 3},
+    ]
+    mock_db.table.return_value.select.return_value.eq.return_value.is_.return_value.execute.return_value = mock_resp
+    
+    # Mock only 2 embeddings returned (even though 3 reviews were passed)
+    dummy_emb_1 = [0.1] * 1536
+    dummy_emb_2 = [0.2] * 1536
+    mock_generate.return_value = [dummy_emb_1, dummy_emb_2]
+    
+    with patch("app.services.embeddings.get_supabase_client", return_value=mock_db):
+        count = run_embeddings("app-x")
+        
+        # Should return 2 (the count of successfully generated/saved embeddings)
+        assert count == 2
+        
+        # Verify db updates were called for only the first 2 reviews
+        mock_db.table.return_value.upsert.assert_called_once_with([
+            {
+                "id": "uuid-1",
+                "catalog_app_id": "app-x",
+                "platform": "play_store",
+                "platform_review_id": "r1",
+                "rating": 5,
+                "embedding": dummy_emb_1,
+            },
+            {
+                "id": "uuid-2",
+                "catalog_app_id": "app-x",
+                "platform": "play_store",
+                "platform_review_id": "r2",
+                "rating": 4,
+                "embedding": dummy_emb_2,
+            },
+        ])
+
 

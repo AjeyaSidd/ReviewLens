@@ -67,8 +67,8 @@ def generate_embeddings_batch(
                 if "429" in error_str or "500" in error_str or "503" in error_str:
                     retries += 1
                     if retries > max_retries:
-                        logger.error("Embedding batch %d failed after single retry", batch_idx + 1)
-                        raise
+                        logger.error("Embedding batch %d failed after retry. Returning successful embeddings so far.", batch_idx + 1)
+                        return all_embeddings
                     
                     # If rate limited (429), wait for a full minute. For server errors, wait 5s.
                     if "429" in error_str:
@@ -81,10 +81,10 @@ def generate_embeddings_batch(
                     time.sleep(wait_time)
                 else:
                     logger.error(
-                        "Embedding unexpected failure batch %d | error=%s",
+                        "Embedding unexpected failure batch %d | error=%s. Returning successful embeddings so far.",
                         batch_idx + 1, error_str, exc_info=True,
                     )
-                    raise  # Propagate unexpected errors immediately
+                    return all_embeddings
 
     return all_embeddings
 
@@ -134,15 +134,17 @@ def run_embeddings(app_id: str) -> int:
     # Generate embeddings
     embeddings = generate_embeddings_batch(texts)
     
-    if len(embeddings) != len(reviews_to_embed):
-        raise ValueError(
-            f"Embedding length mismatch | expected={len(reviews_to_embed)} | received={len(embeddings)}"
-        )
+    if not embeddings:
+        logger.warning("No embeddings successfully generated for app %s", app_id)
+        return 0
+        
+    # We only save reviews that successfully got embeddings
+    successful_reviews = reviews_to_embed[:len(embeddings)]
         
     # Update Supabase reviews with their corresponding float vector list in chunks of 100
     chunk_size = 100
-    for i in range(0, len(reviews_to_embed), chunk_size):
-        chunk = reviews_to_embed[i:i + chunk_size]
+    for i in range(0, len(successful_reviews), chunk_size):
+        chunk = successful_reviews[i:i + chunk_size]
         rows = [
             {
                 "id": item["id"],
@@ -155,7 +157,14 @@ def run_embeddings(app_id: str) -> int:
             for idx, item in enumerate(chunk)
         ]
         db.table("reviews").upsert(rows).execute()
-    updated_count = len(reviews_to_embed)
+    updated_count = len(successful_reviews)
+    
+    if updated_count < len(reviews_to_embed):
+        logger.warning(
+            "Partial embedding completion | requested=%d | successful=%d | app=%s",
+            len(reviews_to_embed), updated_count, app_id
+        )
+    else:
+        logger.info("Successfully updated all %d reviews with vectors | app=%s", updated_count, app_id)
         
-    logger.info("Successfully updated %d reviews with vectors | app=%s", updated_count, app_id)
     return updated_count

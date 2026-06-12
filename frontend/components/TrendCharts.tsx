@@ -27,15 +27,63 @@ interface RollupData {
 }
 
 export default function TrendCharts({ data }: { data: RollupData[] }) {
-  // Format dates for display
-  const chartData = data.map((d) => ({
-    ...d,
-    displayDate: new Date(d.date).toLocaleDateString("en-IN", {
+  // Helper to parse date locally to avoid timezone shifts
+  const parseLocalDate = (dateStr: string) => {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  };
+
+  // Helper to get the Monday of the week for a given date
+  const getMonday = (dateStr: string) => {
+    const d = parseLocalDate(dateStr);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(d.setDate(diff));
+    const yyyy = monday.getFullYear();
+    const mm = String(monday.getMonth() + 1).padStart(2, '0');
+    const dd = String(monday.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  // Group by week Monday
+  const groups: { [key: string]: { date: string; total_rating_sum: number; total_reviews: number } } = {};
+
+  data.forEach((item) => {
+    const weekKey = getMonday(item.date);
+    if (!groups[weekKey]) {
+      groups[weekKey] = {
+        date: weekKey,
+        total_rating_sum: 0,
+        total_reviews: 0,
+      };
+    }
+    const count = item.review_count || 0;
+    const rating = item.avg_rating || 0;
+    groups[weekKey].total_rating_sum += rating * count;
+    groups[weekKey].total_reviews += count;
+  });
+
+  const chartData = Object.values(groups).map((g) => {
+    const avg_rating = g.total_reviews > 0 ? parseFloat((g.total_rating_sum / g.total_reviews).toFixed(2)) : 0;
+    
+    // Format display date: "W/o DD MMM"
+    const [year, month, day] = g.date.split("-").map(Number);
+    const localDate = new Date(year, month - 1, day);
+    const displayDate = "W/o " + localDate.toLocaleDateString("en-IN", {
       day: "numeric",
       month: "short",
-    }),
-    sentiment: d.avg_sentiment !== null ? parseFloat(d.avg_sentiment.toFixed(2)) : 0,
-  }));
+    });
+
+    return {
+      date: g.date,
+      avg_rating,
+      review_count: g.total_reviews,
+      displayDate,
+    };
+  });
+
+  // Sort chronologically
+  chartData.sort((a, b) => a.date.localeCompare(b.date));
 
   if (chartData.length === 0) {
     return (
@@ -47,9 +95,9 @@ export default function TrendCharts({ data }: { data: RollupData[] }) {
 
   return (
     <div className="space-y-6">
-      {/* Chart 1: Daily Rating Trend */}
+      {/* Chart 1: Weekly Rating Trend */}
       <div className="rounded-2xl border border-gray-800 bg-[#151B2C]/30 p-6">
-        <h4 className="mb-6 text-lg font-bold text-gray-300">Daily Rating Trend</h4>
+        <h4 className="mb-6 text-lg font-bold text-gray-300">Weekly Rating Trend</h4>
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
