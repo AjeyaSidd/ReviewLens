@@ -56,3 +56,8 @@ class CatalogAppResponse(BaseModel):
     last_synced_at: Optional[datetime] = None
     review_count: int
     created_at: datetime
+
+
+class SyncAppsRequest(BaseModel):
+    app_identifiers: list[str]
+

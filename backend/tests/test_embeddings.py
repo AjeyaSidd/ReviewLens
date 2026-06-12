@@ -74,7 +74,7 @@ def test_generate_embeddings_multiple_batches(mock_get_settings, mock_genai, moc
     
     assert mock_client.models.embed_content.call_count == 2
     assert len(embeddings) == 150
-    assert mock_time.sleep.call_count == 2
+    assert mock_time.sleep.call_count == 1
     mock_time.sleep.assert_any_call(12.0)
 
 

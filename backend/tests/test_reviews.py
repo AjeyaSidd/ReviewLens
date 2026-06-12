@@ -66,3 +66,29 @@ class TestReviewsEndpoint:
         # Verify query parameters were correctly applied
         query_mock.order.assert_called_with("review_date", desc=True)
         query_mock.order.return_value.range.assert_called_with(0, 9)  # 0 to (0 + 10 - 1)
+
+
+class TestCatalogEndpoint:
+    """Test GET /catalog endpoint."""
+    
+    def test_catalog_hides_zero_review_apps(self, client, mock_db):
+        """Should filter catalog to only return apps with review_count > 0."""
+        mock_resp = MagicMock()
+        mock_resp.data = [
+            {"id": "app-1", "display_name": "App 1", "review_count": 5},
+            {"id": "app-3", "display_name": "App 3", "review_count": 10},
+        ]
+        
+        table_mock = mock_db.table.return_value
+        select_mock = table_mock.select.return_value
+        eq_mock = select_mock.eq.return_value
+        gt_mock = eq_mock.gt.return_value
+        order_mock = gt_mock.order.return_value
+        order_mock.execute.return_value = mock_resp
+        
+        response = client.get("/catalog")
+        
+        assert response.status_code == 200
+        eq_mock.gt.assert_called_once_with("review_count", 0)
+        assert len(response.json()) == 2
+

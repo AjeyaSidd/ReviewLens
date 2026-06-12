@@ -19,6 +19,7 @@ async def list_catalog(db=Depends(get_db)):
         db.table("catalog_apps")
         .select("id, display_name, country, play_package, ios_app_id, review_count, last_synced_at, app_icon_url, scrape_status")
         .eq("is_active", True)
+        .gt("review_count", 0)
         .order("display_name")
         .execute()
     )

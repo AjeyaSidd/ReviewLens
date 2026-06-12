@@ -1,5 +1,6 @@
 from datetime import date, datetime
-from app.services.scrape_play import normalize_play_review
+from unittest.mock import patch
+from app.services.scrape_play import normalize_play_review, scrape_play_reviews
 from app.services.scrape_ios import normalize_ios_review
 
 
@@ -62,3 +63,48 @@ def test_normalize_ios_review():
     assert normalized.app_version == "2.4.0"
     assert normalized.has_text is True
     assert normalized.full_text == "Excellent App!. Fast and smooth"
+
+
+@patch("app.services.scrape_play.reviews")
+def test_scrape_play_reviews_wordlength_filter(mock_reviews):
+    """Verify that scrape_play_reviews filters out reviews with word count <= 3."""
+    mock_reviews.return_value = (
+        [
+            {
+                "reviewId": "r1",
+                "score": 5,
+                "content": "This is very good",
+                "at": datetime(2026, 5, 20),
+                "reviewCreatedVersion": "1.0",
+            },
+            {
+                "reviewId": "r2",
+                "score": 4,
+                "content": "Very good app",
+                "at": datetime(2026, 5, 20),
+                "reviewCreatedVersion": "1.0",
+            },
+            {
+                "reviewId": "r3",
+                "score": 1,
+                "content": "Nice",
+                "at": datetime(2026, 5, 20),
+                "reviewCreatedVersion": "1.0",
+            },
+            {
+                "reviewId": "r4",
+                "score": 3,
+                "content": "I like this app a lot",
+                "at": datetime(2026, 5, 20),
+                "reviewCreatedVersion": "1.0",
+            },
+        ],
+        None,
+    )
+    
+    result = scrape_play_reviews("com.test", max_reviews=10, delay_between_pages=0.0)
+    
+    assert len(result) == 2
+    assert result[0].platform_review_id == "r1"
+    assert result[1].platform_review_id == "r4"
+

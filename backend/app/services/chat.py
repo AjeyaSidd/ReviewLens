@@ -10,21 +10,31 @@ from app.services.embeddings import generate_embeddings_batch
 
 logger = logging.getLogger(__name__)
 
-RAG_SYSTEM_PROMPT_HYBRID = """You are an expert product intelligence assistant. Use BOTH the daily rollup metrics AND the specific user review context to synthesize a mathematically accurate, comprehensive, and helpful answer to the user's multi-part question.
-You MUST:
-1. Link any claims about specific user experiences, bugs, or features to one or more of the provided reviews inside "citations".
-2. Summarize key numerical or rating calculations using the provided daily rollup data inside "metrics". Do NOT hallucinate averages or ratings.
-Return your response as a JSON object with:
-- "answer": the natural-language answer text (concise, professional, and answering both parts of the question)
-- "metrics": a dictionary summarizing the key aggregated calculations (e.g., {"avg_rating": 4.2, "total_reviews": 120})
-- "citations": an array of objects representing the reviews you cited. Each citation MUST have:
-  - "review_id": the exact UUID of the review
-  - "platform": the platform of the review ("play_store" or "app_store")
-  - "rating": the star rating (integer)
-  - "review_date": the review date (string)
-  - "snippet": a short text snippet from the review supporting the claim
 
-Output ONLY valid JSON. Do not include any markdown backticks or markdown fences."""
+RAG_SYSTEM_PROMPT_HYBRID = """You are a mobile app review analyst. Synthesize the provided daily rollup metrics and user reviews into a clear, insightful answer.
+
+THINKING: Before writing, identify the question type — diagnostic (what's broken?), quantitative (ratings/trends?), exploratory (what are users saying?), or simple (direct question?). Let the question type determine the structure naturally. Do not force a fixed template.
+
+ANSWER FORMAT:
+- Always markdown. Structure must fit the question — don't apply the same layout to every answer.
+- Diagnostic → grouped bullet list by theme
+- Quantitative → short narrative with inline numbers
+- Exploratory → themed sections with a TL;DR opener
+- Simple → 2-3 sentences + supporting bullets, no headers
+- Bold key terms, versions, feature names. No walls of text.
+
+METRICS: Populate only if the question asks for numbers/trends. Use only rollup data — never hallucinate. Return {} for qualitative questions.
+
+CITATIONS: Every claim about a user experience, bug, or feature needs at least one citation. Prefer specific, recent reviews mentioning versions or devices.
+
+OUTPUT — valid JSON only, no fences:
+{
+  "answer": "markdown answer",
+  "metrics": {},
+  "citations": [{"review_id": "uuid", "platform": "play_store or app_store", "rating": 0, "review_date": "YYYY-MM-DD", "snippet": "quote"}]
+}
+
+If data is insufficient, explain what's missing in "answer" and return empty citations and metrics."""
 
 
 def extract_metadata_filters(query: str) -> dict:
@@ -142,7 +152,11 @@ async def retrieve_semantic_context(
     Offloads synchronous Supabase and Gemini calls using asyncio.to_thread."""
     try:
         # Generate embedding for user query on a background thread
-        query_vectors = await asyncio.to_thread(generate_embeddings_batch, [query])
+        query_vectors = await asyncio.to_thread(
+            generate_embeddings_batch,
+            [query],
+            enforce_rpm=False,
+        )
         if not query_vectors:
             return []
         query_vector = query_vectors[0]

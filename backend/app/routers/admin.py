@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import verify_admin_key
-from app.services.models import CatalogAppCreate
+from app.services.models import CatalogAppCreate, SyncAppsRequest
 from app.services.sync_app import sync_app
 
 logger = logging.getLogger(__name__)
@@ -115,3 +115,49 @@ async def sync_all_apps(db=Depends(get_db)):
     asyncio.create_task(_sync_all())
     logger.info("Sync-all triggered | apps=%d", len(app_ids))
     return {"detail": f"Sync started for {len(app_ids)} apps", "count": len(app_ids)}
+
+
+@router.post("/sync-apps", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_admin_key)])
+async def sync_selected_apps(body: SyncAppsRequest, db=Depends(get_db)):
+    """Trigger background sync for specific apps by DB UUID, play package, or App Store ID."""
+    app_identifiers = body.app_identifiers
+    if not app_identifiers:
+        raise HTTPException(status_code=400, detail="app_identifiers list cannot be empty")
+        
+    # Get all active apps to resolve identifiers in Python safely
+    result = db.table("catalog_apps").select("id, play_package, ios_app_id").eq("is_active", True).execute()
+    active_apps = result.data or []
+    
+    # Map matched app IDs
+    matched_app_ids = []
+    
+    for identifier in app_identifiers:
+        for app in active_apps:
+            if app.get("id") == identifier:
+                matched_app_ids.append(app["id"])
+                break
+            if app.get("play_package") == identifier:
+                matched_app_ids.append(app["id"])
+                break
+            if app.get("ios_app_id") == identifier:
+                matched_app_ids.append(app["id"])
+                break
+
+    # De-duplicate matches
+    matched_app_ids = list(set(matched_app_ids))
+    
+    if not matched_app_ids:
+        raise HTTPException(status_code=400, detail="No active apps found matching the provided identifiers")
+        
+    # Launch sync for each matched app sequentially in a background task
+    async def _sync_selected():
+        for aid in matched_app_ids:
+            try:
+                await sync_app(aid)
+            except Exception as e:
+                logger.error("Sync failed for app %s during sync-apps: %s", aid, str(e))
+                
+    asyncio.create_task(_sync_selected())
+    logger.info("Sync-apps triggered | requested=%d | matched=%d", len(app_identifiers), len(matched_app_ids))
+    return {"detail": f"Sync started for {len(matched_app_ids)} apps", "count": len(matched_app_ids)}
+

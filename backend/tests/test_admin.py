@@ -183,3 +183,50 @@ class TestSyncAll:
         )
         assert response.status_code == 202
         assert response.json()["count"] == 2
+
+
+class TestSyncApps:
+    """Test POST /admin/sync-apps."""
+    
+    @patch("app.routers.admin.sync_app", new_callable=AsyncMock)
+    def test_sync_apps_success(self, mock_sync_app, client, mock_db):
+        """Should resolve identifiers and run sync for matched active apps."""
+        mock_resp = MagicMock()
+        mock_resp.data = [
+            {"id": "app-1", "play_package": "com.app1", "ios_app_id": "111"},
+            {"id": "app-2", "play_package": "com.app2", "ios_app_id": "222"},
+        ]
+        mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_resp
+        
+        response = client.post(
+            "/admin/sync-apps",
+            json={"app_identifiers": ["com.app1", "app-2", "invalid-id"]},
+            headers={"X-Admin-Key": "test-admin-key"},
+        )
+        assert response.status_code == 202
+        assert response.json()["count"] == 2
+        
+    def test_sync_apps_empty_identifiers_returns_400(self, client):
+        """Should return 400 if app_identifiers list is empty."""
+        response = client.post(
+            "/admin/sync-apps",
+            json={"app_identifiers": []},
+            headers={"X-Admin-Key": "test-admin-key"},
+        )
+        assert response.status_code == 400
+        assert "cannot be empty" in response.json()["detail"]
+        
+    def test_sync_apps_no_match_returns_400(self, client, mock_db):
+        """Should return 400 if no active apps match the identifiers."""
+        mock_resp = MagicMock()
+        mock_resp.data = []
+        mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_resp
+        
+        response = client.post(
+            "/admin/sync-apps",
+            json={"app_identifiers": ["non-matching-id"]},
+            headers={"X-Admin-Key": "test-admin-key"},
+        )
+        assert response.status_code == 400
+        assert "No active apps found" in response.json()["detail"]
+

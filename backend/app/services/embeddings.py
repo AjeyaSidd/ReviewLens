@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 def generate_embeddings_batch(
     texts: list[str],
     max_retries: int = 1,
+    enforce_rpm: bool = True,
 ) -> list[list[float]]:
     """Generate 1536-dimensional embeddings for a list of texts using Gemini API.
     
@@ -55,9 +56,10 @@ def generate_embeddings_batch(
                     batch_idx + 1, len(batches), len(batch)
                 )
                 
-                # Enforce RPM ceiling: space every request by 12 seconds (protect limit across apps)
-                logger.info("Enforcing RPM ceiling: sleeping 12s...")
-                time.sleep(12.0)
+                # Enforce RPM ceiling between batches: space every request by 12 seconds
+                if enforce_rpm and batch_idx < len(batches) - 1:
+                    logger.info("Enforcing RPM ceiling: sleeping 12s...")
+                    time.sleep(12.0)
                 break  # Success, move to the next batch
                 
             except Exception as e:
