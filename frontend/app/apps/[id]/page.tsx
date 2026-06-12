@@ -16,6 +16,8 @@ interface AppMetadata {
   last_synced_at?: string;
   app_icon_url?: string;
   scrape_status?: string;
+  has_play_store?: boolean;
+  has_app_store?: boolean;
 }
 
 interface Review {
@@ -327,7 +329,11 @@ export default function AppDashboardPage({ params }: { params: { id: string } })
 
           {/* Right panel: Chat UI */}
           <div className="w-full lg:col-span-6 h-[600px] lg:h-[880px] flex flex-col">
-            <ChatPanel appId={appId} />
+            <ChatPanel
+              appId={appId}
+              hasPlayStore={app?.has_play_store}
+              hasAppStore={app?.has_app_store}
+            />
           </div>
         </div>
       </main>

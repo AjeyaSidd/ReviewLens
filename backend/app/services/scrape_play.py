@@ -65,8 +65,10 @@ def scrape_play_reviews(
             for raw in result:
                 normalized = normalize_play_review(raw)
                 body_text = normalized.body or ""
-                if len(body_text.split()) > 3:
-                    all_reviews.append(normalized)
+                if len(body_text.split()) <= 3:
+                    normalized.body = ""
+                    normalized.title = ""
+                all_reviews.append(normalized)
             
             pages_fetched += 1
             logger.info(

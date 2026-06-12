@@ -23,7 +23,28 @@ async def list_catalog(db=Depends(get_db)):
         .order("display_name")
         .execute()
     )
-    return result.data or []
+    apps = result.data or []
+    if not apps:
+        return []
+
+    # Get app_id + platform from reviews table where body is not empty
+    reviews_resp = db.table("reviews").select("catalog_app_id, platform").neq("body", "").execute()
+    reviews_data = reviews_resp.data or []
+    
+    app_platforms = {}
+    for r in reviews_data:
+        aid = r["catalog_app_id"]
+        platform = r["platform"]
+        if aid not in app_platforms:
+            app_platforms[aid] = set()
+        app_platforms[aid].add(platform)
+        
+    for app in apps:
+        platforms = app_platforms.get(app["id"], set())
+        app["has_play_store"] = "play_store" in platforms
+        app["has_app_store"] = "app_store" in platforms
+        
+    return apps
 
 
 @router.get("/apps/{app_id}")
@@ -39,8 +60,17 @@ async def get_app(app_id: str, db=Depends(get_db)):
     
     if not result.data:
         raise HTTPException(status_code=404, detail="App not found or not ready")
+        
+    app = result.data[0]
     
-    return result.data[0]
+    # Check platforms having reviews with body not empty
+    reviews_resp = db.table("reviews").select("platform").eq("catalog_app_id", app_id).neq("body", "").execute()
+    platforms = {r["platform"] for r in (reviews_resp.data or [])}
+    
+    app["has_play_store"] = "play_store" in platforms
+    app["has_app_store"] = "app_store" in platforms
+    
+    return app
 
 
 @router.get("/apps/{app_id}/trends")
@@ -114,11 +144,11 @@ async def get_recent_reviews(
         raise HTTPException(status_code=404, detail="App is inactive")
 
     try:
-        # Fetch reviews
         result = (
             db.table("reviews")
             .select("id, platform, rating, title, body, sentiment_label, sentiment_score, review_date")
             .eq("catalog_app_id", app_id)
+            .neq("body", "")
             .order("review_date", desc=True)
             .range(offset, offset + limit - 1)
             .execute()

@@ -67,7 +67,7 @@ def test_normalize_ios_review():
 
 @patch("app.services.scrape_play.reviews")
 def test_scrape_play_reviews_wordlength_filter(mock_reviews):
-    """Verify that scrape_play_reviews filters out reviews with word count <= 3."""
+    """Verify that scrape_play_reviews clears body and title for reviews with word count <= 3."""
     mock_reviews.return_value = (
         [
             {
@@ -104,7 +104,17 @@ def test_scrape_play_reviews_wordlength_filter(mock_reviews):
     
     result = scrape_play_reviews("com.test", max_reviews=10, delay_between_pages=0.0)
     
-    assert len(result) == 2
+    assert len(result) == 4
+    # r1: kept text
     assert result[0].platform_review_id == "r1"
-    assert result[1].platform_review_id == "r4"
+    assert result[0].body == "This is very good"
+    # r2: cleared text
+    assert result[1].platform_review_id == "r2"
+    assert result[1].body == ""
+    # r3: cleared text
+    assert result[2].platform_review_id == "r3"
+    assert result[2].body == ""
+    # r4: kept text
+    assert result[3].platform_review_id == "r4"
+    assert result[3].body == "I like this app a lot"
 

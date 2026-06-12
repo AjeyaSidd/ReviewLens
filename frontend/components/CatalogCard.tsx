@@ -11,6 +11,8 @@ interface AppData {
   last_synced_at?: string;
   app_icon_url?: string;
   scrape_status?: string;
+  has_play_store?: boolean;
+  has_app_store?: boolean;
 }
 
 export default function CatalogCard({ app }: { app: AppData }) {
@@ -75,12 +77,12 @@ export default function CatalogCard({ app }: { app: AppData }) {
 
         {/* Platforms Badge tags */}
         <div className="mt-4 flex gap-2">
-          {app.play_package && (
+          {app.has_play_store && (
             <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-xs font-medium text-emerald-400">
               Google Play
             </span>
           )}
-          {app.ios_app_id && (
+          {app.has_app_store && (
             <span className="rounded-full bg-sky-500/10 border border-sky-500/30 px-3 py-1 text-xs font-medium text-sky-400">
               App Store
             </span>

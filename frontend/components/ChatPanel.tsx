@@ -81,7 +81,15 @@ interface Message {
   citations?: Citation[];
 }
 
-export default function ChatPanel({ appId }: { appId: string }) {
+export default function ChatPanel({
+  appId,
+  hasPlayStore,
+  hasAppStore,
+}: {
+  appId: string;
+  hasPlayStore?: boolean;
+  hasAppStore?: boolean;
+}) {
   const [messages, setMessages] = useState<Message[]>([
     {
       sender: "assistant",
@@ -175,13 +183,6 @@ export default function ChatPanel({ appId }: { appId: string }) {
               {msg.sender === "user" ? msg.text : renderMarkdown(msg.text)}
             </div>
 
-            {/* RAG Metrics summary banner */}
-            {msg.metrics && Object.keys(msg.metrics).length > 0 && (
-              <div className="mt-2 w-full rounded-xl bg-gray-950/80 border border-gray-800/60 p-3 text-xs text-gray-400 font-mono">
-                <span className="font-bold text-indigo-400 uppercase tracking-wider block mb-1">Calculated aggregates:</span>
-                {JSON.stringify(msg.metrics, null, 2)}
-              </div>
-            )}
 
             {/* RAG Citations cards */}
             {msg.citations && msg.citations.length > 0 && (
@@ -224,8 +225,11 @@ export default function ChatPanel({ appId }: { appId: string }) {
         {[
           { label: "🔴 Crashes & Bugs", text: "Are there any recent crashes or login bugs reported?" },
           { label: "💡 Feature Requests", text: "What feature requests or improvements are users asking for?" },
-          { label: "🌟 iOS vs Android", text: "Compare the positive and negative feedback between iOS and Android." },
-          { label: "📈 Top Complaints", text: "What are the top 3 complaints shared by negative reviews?" }
+          { label: "📈 Top Complaints", text: "What are the top 3 complaints shared by negative reviews?" },
+          { label: "⚡ What's Changed", text: "Compare the most recent reviews with earlier feedback and identify any meaningful changes or new issues." },
+          ...(hasPlayStore !== false && hasAppStore !== false
+            ? [{ label: "🌟 iOS vs Android", text: "Compare the positive and negative feedback between iOS and Android." }]
+            : [])
         ].map((s, idx) => (
           <button
             key={idx}

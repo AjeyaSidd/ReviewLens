@@ -54,7 +54,8 @@ class TestReviewsEndpoint:
         mock_db.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = app_resp
         
         query_mock = mock_db.table.return_value.select.return_value.eq.return_value
-        query_mock.order.return_value.range.return_value.execute.return_value = reviews_resp
+        neq_mock = query_mock.neq.return_value
+        neq_mock.order.return_value.range.return_value.execute.return_value = reviews_resp
         
         response = client.get("/apps/test-uuid/reviews?limit=10&offset=0")
         
@@ -64,31 +65,74 @@ class TestReviewsEndpoint:
         assert response.json()[1]["title"] == "Bad"
         
         # Verify query parameters were correctly applied
-        query_mock.order.assert_called_with("review_date", desc=True)
-        query_mock.order.return_value.range.assert_called_with(0, 9)  # 0 to (0 + 10 - 1)
+        query_mock.neq.assert_called_with("body", "")
+        neq_mock.order.assert_called_with("review_date", desc=True)
+        neq_mock.order.return_value.range.assert_called_with(0, 9)  # 0 to (0 + 10 - 1)
 
 
 class TestCatalogEndpoint:
     """Test GET /catalog endpoint."""
     
     def test_catalog_hides_zero_review_apps(self, client, mock_db):
-        """Should filter catalog to only return apps with review_count > 0."""
-        mock_resp = MagicMock()
-        mock_resp.data = [
+        """Should filter catalog to only return apps with review_count > 0 and include platform flags."""
+        catalog_apps_resp = MagicMock()
+        catalog_apps_resp.data = [
             {"id": "app-1", "display_name": "App 1", "review_count": 5},
             {"id": "app-3", "display_name": "App 3", "review_count": 10},
         ]
         
-        table_mock = mock_db.table.return_value
-        select_mock = table_mock.select.return_value
-        eq_mock = select_mock.eq.return_value
-        gt_mock = eq_mock.gt.return_value
-        order_mock = gt_mock.order.return_value
-        order_mock.execute.return_value = mock_resp
+        reviews_resp = MagicMock()
+        reviews_resp.data = [
+            {"catalog_app_id": "app-1", "platform": "play_store"},
+            {"catalog_app_id": "app-3", "platform": "app_store"},
+        ]
+        
+        def table_side_effect(table_name):
+            mock_table = MagicMock()
+            if table_name == "catalog_apps":
+                mock_table.select.return_value.eq.return_value.gt.return_value.order.return_value.execute.return_value = catalog_apps_resp
+            elif table_name == "reviews":
+                mock_table.select.return_value.neq.return_value.execute.return_value = reviews_resp
+            return mock_table
+            
+        mock_db.table.side_effect = table_side_effect
         
         response = client.get("/catalog")
         
         assert response.status_code == 200
-        eq_mock.gt.assert_called_once_with("review_count", 0)
-        assert len(response.json()) == 2
+        data = response.json()
+        assert len(data) == 2
+        assert data[0]["id"] == "app-1"
+        assert data[0]["has_play_store"] is True
+        assert data[0]["has_app_store"] is False
+        assert data[1]["id"] == "app-3"
+        assert data[1]["has_play_store"] is False
+        assert data[1]["has_app_store"] is True
+
+    def test_get_app_details_includes_platform_flags(self, client, mock_db):
+        """Should return single app metadata with has_play_store/has_app_store flags."""
+        app_resp = MagicMock()
+        app_resp.data = [{"id": "app-123", "display_name": "App 123", "is_active": True}]
+        
+        reviews_resp = MagicMock()
+        reviews_resp.data = [{"platform": "play_store"}]
+        
+        def table_side_effect(table_name):
+            mock_table = MagicMock()
+            if table_name == "catalog_apps":
+                mock_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = app_resp
+            elif table_name == "reviews":
+                mock_table.select.return_value.eq.return_value.neq.return_value.execute.return_value = reviews_resp
+            return mock_table
+            
+        mock_db.table.side_effect = table_side_effect
+        
+        response = client.get("/apps/app-123")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == "app-123"
+        assert data["has_play_store"] is True
+        assert data["has_app_store"] is False
+
 

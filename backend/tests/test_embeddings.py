@@ -87,7 +87,7 @@ def test_run_embeddings_empty_or_no_text(mock_generate, mock_db):
         {"id": "r1", "title": "", "body": "", "catalog_app_id": "test-app-uuid", "platform": "play_store", "platform_review_id": "r1", "rating": 5},
         {"id": "r2", "title": "   ", "body": "   ", "catalog_app_id": "test-app-uuid", "platform": "play_store", "platform_review_id": "r2", "rating": 5},
     ]
-    mock_db.table.return_value.select.return_value.eq.return_value.is_.return_value.execute.return_value = mock_resp
+    mock_db.table.return_value.select.return_value.eq.return_value.is_.return_value.neq.return_value.execute.return_value = mock_resp
     
     with patch("app.services.embeddings.get_supabase_client", return_value=mock_db):
         count = run_embeddings("test-app-uuid")
@@ -105,7 +105,7 @@ def test_run_embeddings_e2e_success(mock_generate, mock_db):
         {"id": "uuid-1", "title": "Good", "body": "I like this app.", "catalog_app_id": "test-app-uuid", "platform": "play_store", "platform_review_id": "r1", "rating": 5},
         {"id": "uuid-2", "title": "Spam", "body": very_long_body, "catalog_app_id": "test-app-uuid", "platform": "play_store", "platform_review_id": "r2", "rating": 1},
     ]
-    mock_db.table.return_value.select.return_value.eq.return_value.is_.return_value.execute.return_value = mock_resp
+    mock_db.table.return_value.select.return_value.eq.return_value.is_.return_value.neq.return_value.execute.return_value = mock_resp
     
     # Mock generated embeddings lists
     dummy_emb_1 = [0.01] * 1536
@@ -182,7 +182,7 @@ def test_run_embeddings_partial_success(mock_generate, mock_db):
         {"id": "uuid-2", "title": "G2", "body": "B2", "catalog_app_id": "app-x", "platform": "play_store", "platform_review_id": "r2", "rating": 4},
         {"id": "uuid-3", "title": "G3", "body": "B3", "catalog_app_id": "app-x", "platform": "play_store", "platform_review_id": "r3", "rating": 3},
     ]
-    mock_db.table.return_value.select.return_value.eq.return_value.is_.return_value.execute.return_value = mock_resp
+    mock_db.table.return_value.select.return_value.eq.return_value.is_.return_value.neq.return_value.execute.return_value = mock_resp
     
     # Mock only 2 embeddings returned (even though 3 reviews were passed)
     dummy_emb_1 = [0.1] * 1536

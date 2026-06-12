@@ -97,12 +97,12 @@ def run_embeddings(app_id: str) -> int:
     """
     db = get_supabase_client()
     
-    # Query reviews that have body text but no embedding vector yet
     resp = (
         db.table("reviews")
         .select("id, title, body, catalog_app_id, platform, platform_review_id, rating")
         .eq("catalog_app_id", app_id)
         .is_("embedding", "null")
+        .neq("body", "")
         .execute()
     )
     
