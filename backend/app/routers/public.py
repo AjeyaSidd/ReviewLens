@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["public"])
 
-@app.get("/health")
+@router.get("/health")
 async def health():
     return {"status": "healthy"}
     
