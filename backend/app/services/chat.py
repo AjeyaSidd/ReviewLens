@@ -133,6 +133,19 @@ def extract_metadata_filters(query: str) -> dict:
     )
     if above_stars:
         filters["filter_min_rating"] = int(above_stars.group(1))
+        
+    
+    # Range rating: "2* and 3*", "2 and 3 stars", "2-3 stars", "between 2 and 3 stars"
+    range_star = re.search(
+        r'(\d)\s*(?:stars?|\*)?\s*(?:and|to|or|-)\s*(\d)\s*(?:stars?|\*)',
+        query_lower
+    )
+    if range_star and "filter_min_rating" not in filters and "filter_max_rating" not in filters:
+        low = int(range_star.group(1))
+        high = int(range_star.group(2))
+        if 1 <= low <= 5 and 1 <= high <= 5:
+            filters["filter_min_rating"] = min(low, high)
+            filters["filter_max_rating"] = max(low, high)    
 
     # Exact rating — only if no above/below already matched
     # Handles: "2-star", "2 stars", "2*", "2 star rating", "2 * rating"
