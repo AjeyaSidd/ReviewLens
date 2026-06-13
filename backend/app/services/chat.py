@@ -2,8 +2,7 @@ import json
 import logging
 import asyncio
 import re
-import dateparser
-from datetime import date
+from datetime import date, timedelta
 from google import genai
 from app.config import get_settings
 from app.database import get_supabase_client
@@ -49,144 +48,77 @@ def get_gemini_client() -> genai.Client:
     return _gemini_client
 
 
-def _parse_version(ver_str: str) -> str | None:
-    """
-    Keep version as a string to avoid float precision issues.
-    e.g. "1.10" stays "1.10" not 1.1
-    Validates it looks like a real version number (digits.digits).
-    """
-    ver_str = ver_str.strip()
-    if re.match(r'^\d+\.\d+$', ver_str):
-        return ver_str
-    return None
-
-
-def _extract_date(text: str) -> str | None:
-    """
-    Try to parse a natural language date string using dateparser.
-    Returns ISO date string or None if parsing fails.
-    Only accepts dates in the past (no future dates).
-    """
-    parsed = dateparser.parse(
-        text,
-        settings={
-            "PREFER_DAY_OF_MONTH": "first",
-            "RETURN_AS_TIMEZONE_AWARE": False,
-            "PREFER_DATES_FROM": "past",
-            "RELATIVE_BASE": __import__("datetime").datetime.now(),
-        }
-    )
-    if parsed and parsed.date() <= date.today():
-        return parsed.date().isoformat()
-    return None
-
-
 def extract_metadata_filters(query: str) -> dict:
     """
-    Extract filters (date range, version, rating) from natural language query.
-    Uses dateparser for flexible date extraction, regex for ratings and versions.
+    Extract filters (date range, version, rating) from natural language query using regex.
+    Handles common phrasings like "in the past 6 days", "over the last 2 weeks", "2*", etc.
     """
     filters = {}
     query_lower = query.lower()
+    today = date.today()
 
-    # ── 1. DATE EXTRACTION (dateparser handles most natural language) ────
+    # ── 1. DATE EXTRACTION ───────────────────────────────────────────────
 
-    # Patterns that indicate a "from" date — capture the date expression after the keyword
-    from_date_patterns = [
-        # "last/past N days/weeks/months"
-        r'(?:last|past)\s+\d+\s+(?:days?|weeks?|months?)',
-        # "last/past week/month"
-        r'(?:last|past)\s+(?:week|month)',
-        # "since/after/from <date expression>"
-        r'(?:since|after)\s+[\w\s,]+?(?=\s+(?:to|until|before)|$)',
-        # ISO date
-        r'(?:since|after|from)\s+\d{4}-\d{2}-\d{2}',
-        # Named month + year: "in January 2025", "since March 2024"
-        r'(?:in|since|after|from)\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{4}',
-        # "N days/weeks/months ago"
-        r'\d+\s+(?:days?|weeks?|months?)\s+ago',
-    ]
-
-    for pattern in from_date_patterns:
-        match = re.search(pattern, query_lower)
-        if match:
-            parsed_date = _extract_date(match.group(0))
-            if parsed_date:
-                filters["filter_from_date"] = parsed_date
-                break  # stop at first successful match
-
-    # Patterns that indicate a "to/until" date
-    to_date_patterns = [
-        r'(?:before|until)\s+\d{4}-\d{2}-\d{2}',
-        r'(?:before|until)\s+[\w\s,]+?(?=\s+(?:from|since|after)|$)',
-    ]
-
-    for pattern in to_date_patterns:
-        match = re.search(pattern, query_lower)
-        if match:
-            parsed_date = _extract_date(match.group(0))
-            if parsed_date:
-                filters["filter_to_date"] = parsed_date
-                break
-
-    # ── 2. VERSION EXTRACTION (regex — kept as strings not floats) ───────
-
-    # "above/since/after/from version X.X" or "above/since v X.X"
-    ver_min_match = re.search(
-        r'(?:since|after|above|from|starting)\s+(?:app\s+)?(?:version\s+|v\s*)?(\d+\.\d+)',
+    # "past/last N days/weeks/months", "in the past N days", "over the last 2 weeks"
+    days_match = re.search(
+        r'(?:in\s+the\s+|over\s+the\s+)?(?:last|past)\s+(?:the\s+)?(\d+)\s+(days?|weeks?|months?)',
         query_lower
     )
-    # "X.X and above/later/newer"
-    ver_min_suffix = re.search(
-        r'(\d+\.\d+)\s+(?:and\s+)?(?:above|later|newer|onwards?)',
-        query_lower
-    )
+    if days_match:
+        num = int(days_match.group(1))
+        unit = days_match.group(2)
+        if "day" in unit:
+            delta = num
+        elif "week" in unit:
+            delta = num * 7
+        else:  # month
+            delta = num * 30
+        filters["filter_from_date"] = (today - timedelta(days=delta)).isoformat()
 
-    if ver_min_match:
-        ver = _parse_version(ver_min_match.group(1))
-        if ver:
-            filters["filter_min_version"] = ver
-    elif ver_min_suffix:
-        ver = _parse_version(ver_min_suffix.group(1))
-        if ver:
-            filters["filter_min_version"] = ver
+    elif re.search(r'(?:in\s+the\s+|over\s+the\s+)?(?:last|past)\s+(?:the\s+)?week', query_lower):
+        filters["filter_from_date"] = (today - timedelta(days=7)).isoformat()
 
-    # "before/below/under version X.X"
-    ver_max_match = re.search(
-        r'(?:before|below|under|up\s+to)\s+(?:app\s+)?(?:version\s+|v\s*)?(\d+\.\d+)',
-        query_lower
-    )
-    # "X.X and below/earlier/older"
-    ver_max_suffix = re.search(
-        r'(\d+\.\d+)\s+(?:and\s+)?(?:below|earlier|older)',
-        query_lower
-    )
+    elif re.search(r'(?:in\s+the\s+|over\s+the\s+)?(?:last|past)\s+(?:the\s+)?month', query_lower):
+        filters["filter_from_date"] = (today - timedelta(days=30)).isoformat()
 
-    if ver_max_match:
-        ver = _parse_version(ver_max_match.group(1))
-        if ver:
-            filters["filter_max_version"] = ver
-    elif ver_max_suffix:
-        ver = _parse_version(ver_max_suffix.group(1))
-        if ver:
-            filters["filter_max_version"] = ver
+    # ISO date: "since 2024-01-01", "after 2024-01-01", "from 2024-01-01"
+    iso_from = re.search(r'(?:since|after|from)\s+(\d{4}-\d{2}-\d{2})', query_lower)
+    if iso_from and "filter_from_date" not in filters:
+        filters["filter_from_date"] = iso_from.group(1)
 
-    # Exact version — only if no min/max already set
-    # Handles: "version 20.96", "v20.96", "app version 20.96", "for v20.96"
-    if "filter_min_version" not in filters and "filter_max_version" not in filters:
-        ver_exact_match = re.search(
-            r'(?:(?:app\s+)?version\s+|v\s*)(\d+\.\d+)',
+    # ISO to date: "before 2024-06-01", "until 2024-06-01"
+    iso_to = re.search(r'(?:before|until)\s+(\d{4}-\d{2}-\d{2})', query_lower)
+    if iso_to:
+        filters["filter_to_date"] = iso_to.group(1)
+
+    # Named month: "since January 2025", "after March 15 2024", "from Feb 2024"
+    if "filter_from_date" not in filters:
+        month_map = {
+            "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+            "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+            "january": 1, "february": 2, "march": 3, "april": 4,
+            "june": 6, "july": 7, "august": 8, "september": 9,
+            "october": 10, "november": 11, "december": 12,
+        }
+        month_pattern = re.search(
+            r'(?:since|after|from)\s+('
+            + '|'.join(sorted(month_map.keys(), key=len, reverse=True))
+            + r')\w*\s+(\d{1,2})?(?:st|nd|rd|th)?\s*,?\s*(\d{4})',
             query_lower
         )
-        if ver_exact_match:
-            ver = _parse_version(ver_exact_match.group(1))
-            if ver:
-                filters["filter_min_version"] = ver
-                filters["filter_max_version"] = ver
+        if month_pattern:
+            m = month_map.get(month_pattern.group(1)[:3])
+            day = int(month_pattern.group(2)) if month_pattern.group(2) else 1
+            year = int(month_pattern.group(3))
+            if m:
+                try:
+                    filters["filter_from_date"] = date(year, m, day).isoformat()
+                except ValueError:
+                    pass
 
-    # ── 3. RATING EXTRACTION (regex) ─────────────────────────────────────
+    # ── 2. RATING EXTRACTION ─────────────────────────────────────────────
 
-    # "below/less than/under 3 stars" → max rating is N-1
+    # "below/less than/under 3 stars" → max = N-1
     below_stars = re.search(
         r'(?:below|less than|under|lower than)\s+(\d)\s*(?:stars?|\*)',
         query_lower
@@ -194,7 +126,7 @@ def extract_metadata_filters(query: str) -> dict:
     if below_stars:
         filters["filter_max_rating"] = int(below_stars.group(1)) - 1
 
-    # "above/more than/at least 3 stars" → min rating is N
+    # "above/more than/at least 3 stars" → min = N
     above_stars = re.search(
         r'(?:above|greater than|more than|at least|over)\s+(\d)\s*(?:stars?|\*)',
         query_lower
@@ -202,25 +134,68 @@ def extract_metadata_filters(query: str) -> dict:
     if above_stars:
         filters["filter_min_rating"] = int(above_stars.group(1))
 
-    # Exact rating — only if no min/max already set
-    # Handles: "2-star", "2 stars", "2*", "2 star rating", "2* rating"
+    # Exact rating — only if no above/below already matched
+    # Handles: "2-star", "2 stars", "2*", "2 star rating", "2 * rating"
     if "filter_min_rating" not in filters and "filter_max_rating" not in filters:
         exact_star = re.search(
-            r'(\d)\s*-\s*stars?'           # 2-star, 2 - stars
-            r'|\b(\d)\s*stars?\b'          # 2 stars, 2star
-            r'|(\d)\s*\*'                  # 2*, 2 *
-            r'|\b(\d)\s*star\s*rating\b',  # 2 star rating
+            r'(\d)\s*-\s*stars?'            # 2-star, 2 - stars
+            r'|\b(\d)\s*stars?\b'           # 2 stars, 2star
+            r'|(\d)\s*\*'                   # 2*, 2 *
+            r'|\b(\d)\s*star\s*rating\b',   # 2 star rating
             query_lower
         )
         if exact_star:
-            # Only one group will match — use whichever is not None
-            val = exact_star.group(1) or exact_star.group(2) or exact_star.group(3) or exact_star.group(4)
-            if val:
-                rating_val = int(val)
-                # Sanity check — ratings are 1-5 only
-                if 1 <= rating_val <= 5:
-                    filters["filter_min_rating"] = rating_val
-                    filters["filter_max_rating"] = rating_val
+            val = (
+                exact_star.group(1) or exact_star.group(2)
+                or exact_star.group(3) or exact_star.group(4)
+            )
+            if val and 1 <= int(val) <= 5:
+                filters["filter_min_rating"] = int(val)
+                filters["filter_max_rating"] = int(val)
+
+    # ── 3. VERSION EXTRACTION ─────────────────────────────────────────────
+    # Versions kept as strings (not floats) to avoid 1.10 → 1.1 precision loss
+
+    # "since/after/above v20.96", "from version 20.96", "starting 20.96"
+    ver_min = re.search(
+        r'(?:since|after|above|from|starting)\s+(?:app\s+)?(?:version\s+|v\s*)?(\d+\.\d+)',
+        query_lower
+    )
+    # "20.96 and above/later/newer"
+    ver_min_suffix = re.search(
+        r'(\d+\.\d+)\s+(?:and\s+)?(?:above|later|newer|onwards?)',
+        query_lower
+    )
+    if ver_min:
+        filters["filter_min_version"] = ver_min.group(1)
+    elif ver_min_suffix:
+        filters["filter_min_version"] = ver_min_suffix.group(1)
+
+    # "before/below/under version 20.96", "up to v20.96"
+    ver_max = re.search(
+        r'(?:before|below|under|up\s+to)\s+(?:app\s+)?(?:version\s+|v\s*)?(\d+\.\d+)',
+        query_lower
+    )
+    # "20.96 and below/earlier/older"
+    ver_max_suffix = re.search(
+        r'(\d+\.\d+)\s+(?:and\s+)?(?:below|earlier|older)',
+        query_lower
+    )
+    if ver_max:
+        filters["filter_max_version"] = ver_max.group(1)
+    elif ver_max_suffix:
+        filters["filter_max_version"] = ver_max_suffix.group(1)
+
+    # Exact version — only if no min/max already set
+    # Handles: "version 20.96", "v20.96", "app version 20.96", "for v20.96"
+    if "filter_min_version" not in filters and "filter_max_version" not in filters:
+        ver_exact = re.search(
+            r'(?:(?:app\s+)?version\s+|v\s*)(\d+\.\d+)',
+            query_lower
+        )
+        if ver_exact:
+            filters["filter_min_version"] = ver_exact.group(1)
+            filters["filter_max_version"] = ver_exact.group(1)
 
     return filters
 
@@ -326,11 +301,11 @@ async def run_hybrid_rag(app_id: str, query: str) -> dict:
         settings = get_settings()
         client = get_gemini_client()
 
-        # 1. Extract metadata filters
+        # 1. Extract metadata filters — pure regex, zero latency
         filters = extract_metadata_filters(query)
         logger.info("Extracted metadata filters | query='%s' | filters=%s", query, filters)
 
-        # 2. Retrieve contexts concurrently
+        # 2. Retrieve contexts concurrently — both DB calls fire at the same time
         trends_data, reviews_data = await asyncio.gather(
             retrieve_trends_context(app_id),
             retrieve_semantic_context(
