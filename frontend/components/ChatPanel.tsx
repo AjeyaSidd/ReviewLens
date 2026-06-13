@@ -225,6 +225,7 @@ export default function ChatPanel({
         {[
           { label: "🔴 Crashes & Bugs", text: "Are there any recent crashes or login bugs reported?" },
           { label: "💡 Feature Requests", text: "What feature requests or improvements are users asking for?" },
+		    label: "⭐ Top Praises", text: "What are the top 3 positive themes mentioned by users??" },
           { label: "📈 Top Complaints", text: "What are the top 3 complaints shared by negative reviews?" },
           { label: "⚡ What's Changed", text: "Compare the most recent reviews with earlier feedback and identify any meaningful changes or new issues." },
           ...(hasPlayStore !== false && hasAppStore !== false
