@@ -11,7 +11,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["public"])
 
-
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
+    
+    
 @router.get("/catalog")
 async def list_catalog(db=Depends(get_db)):
     """List active apps for public consumption."""
