@@ -49,11 +49,11 @@ export default function HomePage() {
           <div className="flex items-center gap-3">
             <span className="text-xl">🧠</span>
             <h1 className="text-lg font-black bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent tracking-tight">
-              APP REVIEW INTELLIGENCE
+              ReviewLens
             </h1>
           </div>
           <div className="text-xs text-gray-500 font-medium">
-            Product Dashboard (v1.0)
+            
           </div>
         </div>
       </header>
@@ -63,14 +63,14 @@ export default function HomePage() {
         {/* Hero Section */}
         <section className="mb-8 text-center max-w-2xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-black text-gray-100 tracking-tight leading-tight">
-            Explore Curated App Store & Google Play reviews with{" "}
+            Know What Your Users Are Really Saying with{" "}
             <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 bg-clip-text text-transparent">
-              AI Chat
+              ReviewLens
             </span>
           </h2>
-          <p className="mt-2 text-sm text-gray-400 font-medium leading-relaxed">
-            Quickly monitor rating and sentiment trends, analyze user experience aggregates, and ask natural-language questions with immediate verified citations.
-          </p>
+          <span className="block mt-2 text-base md:text-lg font-medium text-gray-400 leading-relaxed">
+			Track daily ratings, spot trends over time, ask anything about your product, and get answers backed by real user feedback.
+		</span
         </section>
 
         {/* Catalog Grid */}
