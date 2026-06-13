@@ -11,30 +11,36 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["public"])
 
+
 @router.get("/health")
 async def health():
     return {"status": "healthy"}
-    
-    
+
+
 @router.get("/catalog")
 async def list_catalog(db=Depends(get_db)):
     """List active apps for public consumption."""
-    result = (
+
+    # ✅ Both DB calls fire in parallel — no waiting for one before the other
+    apps_result, reviews_resp = await asyncio.gather(
         db.table("catalog_apps")
         .select("id, display_name, country, play_package, ios_app_id, review_count, last_synced_at, app_icon_url, scrape_status")
         .eq("is_active", True)
         .gt("review_count", 0)
         .order("display_name")
-        .execute()
+        .execute(),
+        db.table("reviews")
+        .select("catalog_app_id, platform")
+        .neq("body", "")
+        .execute(),
     )
-    apps = result.data or []
+
+    apps = apps_result.data or []
     if not apps:
         return []
 
-    # Get app_id + platform from reviews table where body is not empty
-    reviews_resp = db.table("reviews").select("catalog_app_id, platform").neq("body", "").execute()
     reviews_data = reviews_resp.data or []
-    
+
     app_platforms = {}
     for r in reviews_data:
         aid = r["catalog_app_id"]
@@ -42,38 +48,42 @@ async def list_catalog(db=Depends(get_db)):
         if aid not in app_platforms:
             app_platforms[aid] = set()
         app_platforms[aid].add(platform)
-        
+
     for app in apps:
         platforms = app_platforms.get(app["id"], set())
         app["has_play_store"] = "play_store" in platforms
         app["has_app_store"] = "app_store" in platforms
-        
+
     return apps
 
 
 @router.get("/apps/{app_id}")
 async def get_app(app_id: str, db=Depends(get_db)):
     """Get a single app's metadata (only if active)."""
-    result = (
+
+    # ✅ Both DB calls fire in parallel
+    app_result, reviews_resp = await asyncio.gather(
         db.table("catalog_apps")
         .select("*")
         .eq("id", app_id)
         .eq("is_active", True)
-        .execute()
+        .execute(),
+        db.table("reviews")
+        .select("platform")
+        .eq("catalog_app_id", app_id)
+        .neq("body", "")
+        .execute(),
     )
-    
-    if not result.data:
+
+    if not app_result.data:
         raise HTTPException(status_code=404, detail="App not found or not ready")
-        
-    app = result.data[0]
-    
-    # Check platforms having reviews with body not empty
-    reviews_resp = db.table("reviews").select("platform").eq("catalog_app_id", app_id).neq("body", "").execute()
+
+    app = app_result.data[0]
     platforms = {r["platform"] for r in (reviews_resp.data or [])}
-    
+
     app["has_play_store"] = "play_store" in platforms
     app["has_app_store"] = "app_store" in platforms
-    
+
     return app
 
 
@@ -85,22 +95,33 @@ async def get_app_trends(
     db=Depends(get_db),
 ):
     """Retrieve pre-aggregated daily rollups for an app, optionally filtered by date range."""
-    # First verify that the app exists and is active
-    app_resp = db.table("catalog_apps").select("id, is_active").eq("id", app_id).single().execute()
+
+    # ✅ Truly async — no thread needed
+    app_resp = await (
+        db.table("catalog_apps")
+        .select("id, is_active")
+        .eq("id", app_id)
+        .single()
+        .execute()
+    )
+
     if not app_resp.data:
         raise HTTPException(status_code=404, detail="App not found")
     if not app_resp.data.get("is_active"):
         raise HTTPException(status_code=404, detail="App is not active")
 
-    # Fetch rollups
-    query = db.table("daily_rollups").select("*").eq("catalog_app_id", app_id)
-    
+    query = (
+        db.table("daily_rollups")
+        .select("*")
+        .eq("catalog_app_id", app_id)
+    )
+
     if from_date:
         query = query.gte("date", from_date.isoformat())
     if to_date:
         query = query.lte("date", to_date.isoformat())
-        
-    result = query.order("date").execute()
+
+    result = await query.order("date").execute()
     return result.data or []
 
 
@@ -115,10 +136,16 @@ async def chat_with_reviews(
     db=Depends(get_db),
 ):
     """Ask a natural-language question about review trends or user experiences."""
-    # First verify that the app exists and is active
-    app_resp = await asyncio.to_thread(
-        db.table("catalog_apps").select("id, is_active").eq("id", app_id).single().execute
+
+    # ✅ Truly async — no asyncio.to_thread needed anymore
+    app_resp = await (
+        db.table("catalog_apps")
+        .select("id, is_active")
+        .eq("id", app_id)
+        .single()
+        .execute()
     )
+
     if not app_resp.data:
         raise HTTPException(status_code=404, detail="App not found")
     if not app_resp.data.get("is_active"):
@@ -140,15 +167,23 @@ async def get_recent_reviews(
     db=Depends(get_db),
 ):
     """Retrieve recent reviews for an app sorted by date descending."""
-    # First verify that the app exists and is active
-    app_resp = db.table("catalog_apps").select("id, is_active").eq("id", app_id).single().execute()
+
+    # ✅ Truly async — no asyncio.to_thread needed anymore
+    app_resp = await (
+        db.table("catalog_apps")
+        .select("id, is_active")
+        .eq("id", app_id)
+        .single()
+        .execute()
+    )
+
     if not app_resp.data:
         raise HTTPException(status_code=404, detail="App not found")
     if not app_resp.data.get("is_active"):
         raise HTTPException(status_code=404, detail="App is inactive")
 
     try:
-        result = (
+        result = await (
             db.table("reviews")
             .select("id, platform, rating, title, body, sentiment_label, sentiment_score, review_date")
             .eq("catalog_app_id", app_id)
@@ -157,8 +192,7 @@ async def get_recent_reviews(
             .range(offset, offset + limit - 1)
             .execute()
         )
-        
-        # Map sentiment_label/sentiment key to uppercase sentiment format expected by the frontend
+
         reviews = []
         for r in (result.data or []):
             label = r.get("sentiment_label") or r.get("sentiment")

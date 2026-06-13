@@ -1,14 +1,19 @@
-from supabase import create_client, Client
+from supabase._async.client import AsyncClient, create_client
 from app.config import get_settings
 
-_client: Client | None = None
+_client: AsyncClient | None = None
 
-def get_supabase_client() -> Client:
+
+async def get_supabase_client() -> AsyncClient:
     global _client
     if _client is None:
         settings = get_settings()
-        _client = create_client(settings.supabase_url, settings.supabase_service_role_key)
+        _client = await create_client(
+            settings.supabase_url,
+            settings.supabase_service_role_key,
+        )
     return _client
 
-def get_db() -> Client:
-    return get_supabase_client()
+
+async def get_db() -> AsyncClient:
+    return await get_supabase_client()

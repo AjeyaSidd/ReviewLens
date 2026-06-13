@@ -37,14 +37,24 @@ OUTPUT — valid JSON only, no fences:
 If data is insufficient, explain what's missing in "answer" and return empty citations and metrics."""
 
 
+# ✅ Singleton Gemini client — created once, reused across all requests
+_gemini_client: genai.Client | None = None
+
+def get_gemini_client() -> genai.Client:
+    global _gemini_client
+    if _gemini_client is None:
+        settings = get_settings()
+        _gemini_client = genai.Client(api_key=settings.gemini_api_key)
+    return _gemini_client
+
+
 def extract_metadata_filters(query: str) -> dict:
     """Extract filters (date range, version, rating) from natural language query using regex."""
     filters = {}
     query_lower = query.lower()
     today = date.today()
-    
+
     # 1. Date Range extraction
-    # last \d+ days
     days_match = re.search(r'last\s+(\d+)\s+days?', query_lower)
     if days_match:
         num_days = int(days_match.group(1))
@@ -56,18 +66,15 @@ def extract_metadata_filters(query: str) -> dict:
     elif "last month" in query_lower:
         from_date = today - timedelta(days=30)
         filters["filter_from_date"] = from_date.isoformat()
-        
-    # ISO date match: since 2024-01-01 / after 2024-01-01
+
     iso_from_match = re.search(r'(?:since|after|from)\s+(\d{4}-\d{2}-\d{2})', query_lower)
     if iso_from_match:
         filters["filter_from_date"] = iso_from_match.group(1)
-        
-    # before 2024-01-01 / until 2024-01-01 / to 2024-01-01
+
     iso_to_match = re.search(r'(?:before|until|to)\s+(\d{4}-\d{2}-\d{2})', query_lower)
     if iso_to_match:
         filters["filter_to_date"] = iso_to_match.group(1)
-        
-    # Named months: after Jan 1 2024 / since February 15, 2024
+
     months = {
         "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
         "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
@@ -86,25 +93,22 @@ def extract_metadata_filters(query: str) -> dict:
                 filters["filter_from_date"] = date(year, month_num, day).isoformat()
             except ValueError:
                 pass
-                
-    # 2. Version extraction (major.minor format, e.g. 20.96)
-    # since version 20.96 / after v20.96
+
+    # 2. Version extraction
     ver_min_match = re.search(r'(?:since|after|above|from)\s+(?:version\s+|v)?(\d+\.\d+)', query_lower)
     if ver_min_match:
         try:
             filters["filter_min_version"] = float(ver_min_match.group(1))
         except ValueError:
             pass
-        
-    # before version 20.96 / below v20.96
+
     ver_max_match = re.search(r'(?:before|below|under|to)\s+(?:version\s+|v)?(\d+\.\d+)', query_lower)
     if ver_max_match:
         try:
             filters["filter_max_version"] = float(ver_max_match.group(1))
         except ValueError:
             pass
-        
-    # version 20.99 (exact matching)
+
     ver_exact_match = re.search(r'(?:version\s+|v)(\d+\.\d+)', query_lower)
     if ver_exact_match and "filter_min_version" not in filters and "filter_max_version" not in filters:
         try:
@@ -113,27 +117,24 @@ def extract_metadata_filters(query: str) -> dict:
             filters["filter_max_version"] = ver
         except ValueError:
             pass
-        
+
     # 3. Rating extraction
-    # below 3 stars
     below_stars_match = re.search(r'(?:below|less than|under|lower than)\s+(\d)\s*star', query_lower)
     if below_stars_match:
         rating_val = int(below_stars_match.group(1))
         filters["filter_max_rating"] = rating_val - 1
-        
-    # above 3 stars
+
     above_stars_match = re.search(r'(?:above|greater than|more than|at least|since)\s+(\d)\s*star', query_lower)
     if above_stars_match:
         rating_val = int(above_stars_match.group(1))
         filters["filter_min_rating"] = rating_val
-        
-    # exact rating match: 1-star reviews / 5 star
+
     star_match = re.search(r'(\d)\s*-\s*stars?|\b(\d)\s*stars?\b', query_lower)
     if star_match and "filter_min_rating" not in filters and "filter_max_rating" not in filters:
         rating_val = int(star_match.group(1) or star_match.group(2))
         filters["filter_min_rating"] = rating_val
         filters["filter_max_rating"] = rating_val
-        
+
     return filters
 
 
@@ -148,10 +149,9 @@ async def retrieve_semantic_context(
     filter_min_rating: int | None = None,
     filter_max_rating: int | None = None,
 ) -> list[dict]:
-    """Retrieve top K reviews matching query semantic vector embedding, applying metadata filters.
-    Offloads synchronous Supabase and Gemini calls using asyncio.to_thread."""
+    """Retrieve top K reviews via semantic vector search with metadata filters."""
     try:
-        # Generate embedding for user query on a background thread
+        # Embedding generation is still sync (Google SDK) — kept on thread
         query_vectors = await asyncio.to_thread(
             generate_embeddings_batch,
             [query],
@@ -160,17 +160,17 @@ async def retrieve_semantic_context(
         if not query_vectors:
             return []
         query_vector = query_vectors[0]
-        
-        db = get_supabase_client()
-        
-        # Build RPC params
+
+        # ✅ Async Supabase client — no thread needed for DB call
+        db = await get_supabase_client()
+
         rpc_params = {
             "query_embedding": query_vector,
             "match_threshold": 0.3,
             "match_count": limit,
             "filter_app_id": app_id,
         }
-        
+
         if filter_from_date is not None:
             rpc_params["filter_from_date"] = filter_from_date
         if filter_to_date is not None:
@@ -184,34 +184,31 @@ async def retrieve_semantic_context(
         if filter_max_rating is not None:
             rpc_params["filter_max_rating"] = filter_max_rating
 
-        # Execute Supabase RPC call on background thread
-        resp = await asyncio.to_thread(
-            db.rpc("match_reviews", rpc_params).execute
-        )
-        
+        # ✅ Truly async RPC call
+        resp = await db.rpc("match_reviews", rpc_params).execute()
         return resp.data or []
+
     except Exception as e:
         logger.error("Failed to retrieve semantic vector context | error=%s", str(e), exc_info=True)
         return []
 
 
 async def retrieve_trends_context(app_id: str, limit: int = 30) -> list[dict]:
-    """Retrieve daily rollup historical logs for app_id (last 30 days) on a background thread."""
+    """Retrieve daily rollup historical logs for app_id (last 30 days)."""
     try:
-        db = get_supabase_client()
-        
-        def _execute_query():
-            return (
-                db.table("daily_rollups")
-                .select("*")
-                .eq("catalog_app_id", app_id)
-                .order("date", desc=True)
-                .limit(limit)
-                .execute()
-            )
-            
-        resp = await asyncio.to_thread(_execute_query)
+        # ✅ Async Supabase client — no thread needed
+        db = await get_supabase_client()
+
+        resp = await (
+            db.table("daily_rollups")
+            .select("*")
+            .eq("catalog_app_id", app_id)
+            .order("date", desc=True)
+            .limit(limit)
+            .execute()
+        )
         return resp.data or []
+
     except Exception as e:
         logger.error("Failed to retrieve trends SQL context | error=%s", str(e), exc_info=True)
         return []
@@ -226,7 +223,7 @@ def _parse_rag_response(response_text: str) -> dict:
         if text.endswith("```"):
             text = text[:-3]
         text = text.strip()
-        
+
     try:
         return json.loads(text)
     except json.JSONDecodeError:
@@ -242,23 +239,25 @@ async def run_hybrid_rag(app_id: str, query: str) -> dict:
     """Coordinate async parallel context retrieval and Gemini answer synthesis."""
     try:
         settings = get_settings()
-        client = genai.Client(api_key=settings.gemini_api_key)
-        
-        # 1. Extract metadata filters from natural language query
+
+        # ✅ Reuse singleton Gemini client — not created fresh each request
+        client = get_gemini_client()
+
+        # 1. Extract metadata filters
         filters = extract_metadata_filters(query)
         logger.info("Extracted metadata filters | query='%s' | filters=%s", query, filters)
-        
-        # 2. Retrieve contexts concurrently using asyncio.gather
-        trends_task = retrieve_trends_context(app_id)
-        semantic_task = retrieve_semantic_context(
-            app_id=app_id,
-            query=query,
-            limit=20,
-            **filters
+
+        # 2. Retrieve contexts concurrently — both DB calls fire at the same time
+        trends_data, reviews_data = await asyncio.gather(
+            retrieve_trends_context(app_id),
+            retrieve_semantic_context(
+                app_id=app_id,
+                query=query,
+                limit=20,
+                **filters,
+            ),
         )
-        
-        trends_data, reviews_data = await asyncio.gather(trends_task, semantic_task)
-        
+
         # 3. Format context string
         clean_reviews = [
             {
@@ -272,19 +271,19 @@ async def run_hybrid_rag(app_id: str, query: str) -> dict:
             }
             for r in reviews_data
         ]
-        
+
         trends_str = json.dumps(trends_data, indent=2)
         reviews_str = json.dumps(clean_reviews, indent=2)
-        
+
         prompt = (
             f"Question: {query}\n\n"
             f"Daily Rollups Context:\n{trends_str}\n\n"
             f"Reviews Context:\n{reviews_str}"
         )
-        
-        # 4. Generate Answer using Gemini API via asyncio.to_thread
+
+        # 4. Gemini is still sync SDK — kept on thread, but reuses singleton client
         logger.info("Executing Gemini RAG | prompt_length=%d", len(prompt))
-        
+
         def _generate():
             return client.models.generate_content(
                 model=settings.gemini_sentiment_model,
@@ -294,16 +293,16 @@ async def run_hybrid_rag(app_id: str, query: str) -> dict:
                     temperature=0.2,
                 ),
             )
-            
+
         response = await asyncio.to_thread(_generate)
-        
-        # 5. Parse & Return
+
+        # 5. Parse & return
         return _parse_rag_response(response.text)
-        
+
     except Exception as e:
         error_msg = str(e)
         logger.error("RAG execution failed | error=%s", error_msg, exc_info=True)
-        
+
         if "503" in error_msg or "temporary" in error_msg or "high demand" in error_msg or "UNAVAILABLE" in error_msg:
             return {
                 "answer": "ReviewLens is currently experiencing high demand from the AI service. This is usually temporary—please wait a moment and try sending your question again.",
