@@ -80,7 +80,7 @@ export default function HomePage() {
           </div>
 
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {[...Array(3)].map((_, i) => (
                 <div key={i} className="h-48 animate-pulse rounded-2xl border border-gray-800 bg-[#151B2C]/50" />
               ))}

@@ -28,7 +28,7 @@ export default function CatalogCard({ app }: { app: AppData }) {
 
   return (
     <Link href={`/apps/${app.id}`}>
-      <div className="group relative block rounded-2xl border border-gray-800 bg-[#151B2C] p-6 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-indigo-500/50 hover:bg-[#1C253B] hover:shadow-indigo-500/10">
+      <div className="group relative block rounded-2xl border border-gray-800 bg-[#151B2C] p-4 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-indigo-500/50 hover:bg-[#1C253B] hover:shadow-indigo-500/10">
         
         {/* Flag, Country, & Scrape Status badges */}
         <div className="absolute right-6 top-6 flex items-center gap-2">
