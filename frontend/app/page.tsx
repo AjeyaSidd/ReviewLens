@@ -70,7 +70,7 @@ export default function HomePage() {
           </h2>
           <span className="block mt-2 text-base md:text-lg font-medium text-gray-400 leading-relaxed">
 			Track daily ratings, spot trends over time, ask anything about your product, and get answers backed by real user feedback.
-		</span
+		</span>
         </section>
 
         {/* Catalog Grid */}
