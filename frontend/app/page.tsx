@@ -63,13 +63,10 @@ export default function HomePage() {
         {/* Hero Section */}
         <section className="mb-8 text-center max-w-2xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-black text-gray-100 tracking-tight leading-tight">
-            Know What Your Users Are Really Saying with{" "}
-            <span className="bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 bg-clip-text text-transparent">
-              ReviewLens
-            </span>
+            Know What Your Users Are Really Saying
           </h2>
           <span className="block mt-2 text-base md:text-lg font-medium text-gray-400 leading-relaxed">
-			Track daily ratings, spot trends over time, ask anything about your product, and get answers backed by real user feedback.
+			Track ratings, spot trends, and get answers backed by real user feedback.
 		</span>
         </section>
 
