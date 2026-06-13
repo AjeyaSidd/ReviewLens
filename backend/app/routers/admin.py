@@ -16,23 +16,22 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 async def add_app(body: CatalogAppCreate, db=Depends(get_db)):
     """Add a new app to the catalog. Rejects if >= 15 active apps."""
     settings = get_settings()
-    
-    # Check active app count
-    count_resp = (
+
+    # ✅ await added
+    count_resp = await (
         db.table("catalog_apps")
         .select("id", count="exact")
         .eq("is_active", True)
         .execute()
     )
     active_count = count_resp.count if count_resp.count is not None else 0
-    
+
     if active_count >= settings.max_active_apps:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Maximum of {settings.max_active_apps} active apps reached. Delete an app before adding a new one.",
         )
-    
-    # Insert new app
+
     insert_data = {
         "display_name": body.display_name,
         "country": body.country,
@@ -42,12 +41,13 @@ async def add_app(body: CatalogAppCreate, db=Depends(get_db)):
         "is_active": True,
         "scrape_status": "pending",
     }
-    
-    result = db.table("catalog_apps").insert(insert_data).execute()
-    
+
+    # ✅ await added
+    result = await db.table("catalog_apps").insert(insert_data).execute()
+
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create app")
-    
+
     logger.info("App created | id=%s | name=%s", result.data[0]["id"], body.display_name)
     return result.data[0]
 
@@ -55,19 +55,20 @@ async def add_app(body: CatalogAppCreate, db=Depends(get_db)):
 @router.delete("/apps/{app_id}", dependencies=[Depends(verify_admin_key)])
 async def delete_app(app_id: str, purge: bool = False, db=Depends(get_db)):
     """Delete an app. If purge=true, cascade delete reviews and rollups."""
-    # Check app exists
-    app_resp = db.table("catalog_apps").select("id").eq("id", app_id).execute()
+
+    # ✅ await added
+    app_resp = await db.table("catalog_apps").select("id").eq("id", app_id).execute()
     if not app_resp.data:
         raise HTTPException(status_code=404, detail="App not found")
-    
+
     if purge:
-        # Cascade delete is handled by DB foreign keys, just delete the app
-        db.table("catalog_apps").delete().eq("id", app_id).execute()
+        # ✅ await added
+        await db.table("catalog_apps").delete().eq("id", app_id).execute()
         logger.info("App purged | id=%s", app_id)
         return {"detail": f"App {app_id} and all related data purged"}
     else:
-        # Soft delete: set is_active to false
-        db.table("catalog_apps").update({"is_active": False}).eq("id", app_id).execute()
+        # ✅ await added
+        await db.table("catalog_apps").update({"is_active": False}).eq("id", app_id).execute()
         logger.info("App deactivated | id=%s", app_id)
         return {"detail": f"App {app_id} deactivated"}
 
@@ -75,21 +76,29 @@ async def delete_app(app_id: str, purge: bool = False, db=Depends(get_db)):
 @router.get("/apps", dependencies=[Depends(verify_admin_key)])
 async def list_all_apps(db=Depends(get_db)):
     """List all apps (active and inactive) with scrape status."""
-    result = db.table("catalog_apps").select("*").order("created_at", desc=True).execute()
+
+    # ✅ await added
+    result = await db.table("catalog_apps").select("*").order("created_at", desc=True).execute()
     return result.data or []
 
 
 @router.post("/apps/{app_id}/refresh", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_admin_key)])
 async def refresh_app(app_id: str, db=Depends(get_db)):
     """Trigger background sync for one app. Returns 202 immediately."""
-    # Verify app exists and is active
-    app_resp = db.table("catalog_apps").select("id, is_active").eq("id", app_id).single().execute()
+
+    # ✅ await added
+    app_resp = await (
+        db.table("catalog_apps")
+        .select("id, is_active")
+        .eq("id", app_id)
+        .single()
+        .execute()
+    )
     if not app_resp.data:
         raise HTTPException(status_code=404, detail="App not found")
     if not app_resp.data.get("is_active"):
         raise HTTPException(status_code=400, detail="App is not active")
-    
-    # Launch sync in background
+
     asyncio.create_task(sync_app(app_id))
     logger.info("Refresh triggered | app_id=%s", app_id)
     return {"detail": f"Sync started for app {app_id}", "app_id": app_id}
@@ -98,20 +107,21 @@ async def refresh_app(app_id: str, db=Depends(get_db)):
 @router.post("/sync-all", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_admin_key)])
 async def sync_all_apps(db=Depends(get_db)):
     """Trigger background sync for all active apps. Returns 202 immediately."""
-    result = db.table("catalog_apps").select("id").eq("is_active", True).execute()
+
+    # ✅ await added
+    result = await db.table("catalog_apps").select("id").eq("is_active", True).execute()
     app_ids = [app["id"] for app in (result.data or [])]
-    
+
     if not app_ids:
         return {"detail": "No active apps to sync", "count": 0}
-    
-    # Launch sync for each app sequentially in a single background task
+
     async def _sync_all():
         for aid in app_ids:
             try:
                 await sync_app(aid)
             except Exception as e:
                 logger.error("Sync failed for app %s during sync-all: %s", aid, str(e))
-    
+
     asyncio.create_task(_sync_all())
     logger.info("Sync-all triggered | apps=%d", len(app_ids))
     return {"detail": f"Sync started for {len(app_ids)} apps", "count": len(app_ids)}
@@ -123,14 +133,17 @@ async def sync_selected_apps(body: SyncAppsRequest, db=Depends(get_db)):
     app_identifiers = body.app_identifiers
     if not app_identifiers:
         raise HTTPException(status_code=400, detail="app_identifiers list cannot be empty")
-        
-    # Get all active apps to resolve identifiers in Python safely
-    result = db.table("catalog_apps").select("id, play_package, ios_app_id").eq("is_active", True).execute()
+
+    # ✅ await added
+    result = await (
+        db.table("catalog_apps")
+        .select("id, play_package, ios_app_id")
+        .eq("is_active", True)
+        .execute()
+    )
     active_apps = result.data or []
-    
-    # Map matched app IDs
+
     matched_app_ids = []
-    
     for identifier in app_identifiers:
         for app in active_apps:
             if app.get("id") == identifier:
@@ -143,21 +156,18 @@ async def sync_selected_apps(body: SyncAppsRequest, db=Depends(get_db)):
                 matched_app_ids.append(app["id"])
                 break
 
-    # De-duplicate matches
     matched_app_ids = list(set(matched_app_ids))
-    
+
     if not matched_app_ids:
         raise HTTPException(status_code=400, detail="No active apps found matching the provided identifiers")
-        
-    # Launch sync for each matched app sequentially in a background task
+
     async def _sync_selected():
         for aid in matched_app_ids:
             try:
                 await sync_app(aid)
             except Exception as e:
                 logger.error("Sync failed for app %s during sync-apps: %s", aid, str(e))
-                
+
     asyncio.create_task(_sync_selected())
     logger.info("Sync-apps triggered | requested=%d | matched=%d", len(app_identifiers), len(matched_app_ids))
     return {"detail": f"Sync started for {len(matched_app_ids)} apps", "count": len(matched_app_ids)}
-
