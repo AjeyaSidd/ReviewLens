@@ -135,9 +135,9 @@ def extract_metadata_filters(query: str) -> dict:
         filters["filter_min_rating"] = int(above_stars.group(1))
         
     
-    # Range rating: "2* and 3*", "2 and 3 stars", "2-3 stars", "between 2 and 3 stars"
+    # Range rating: "2* and 3*", "2 and 3 stars", "2-3 stars", "between 2 and 3 stars", "2* vs 3*"
     range_star = re.search(
-        r'(\d)\s*(?:stars?|\*)?\s*(?:and|to|or|-)\s*(\d)\s*(?:stars?|\*)',
+        r'(\d)\s*(?:stars?|\*)?\s*(?:and|to|or|-|vs\.?|versus)\s*(\d)\s*(?:stars?|\*)',
         query_lower
     )
     if range_star and "filter_min_rating" not in filters and "filter_max_rating" not in filters:
