@@ -47,7 +47,7 @@ export default function HomePage() {
       <header className="border-b border-gray-800 bg-[#0F1524]/60 backdrop-blur-md sticky top-0 z-40">
         <div className="mx-auto max-w-7xl px-6 py-2.5 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <span className="text-xl">🧠</span>
+            <span className="text-xl">🔍📝</span>
             <h1 className="text-lg font-black bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent tracking-tight">
               ReviewLens
             </h1>
