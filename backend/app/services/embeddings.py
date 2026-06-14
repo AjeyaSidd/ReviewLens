@@ -56,7 +56,7 @@ def generate_embeddings_batch(
                 )
 
                 if enforce_rpm and batch_idx < len(batches) - 1:
-                    logger.info("Enforcing RPM ceiling: sleeping 12s...")
+                    logger.info("Enforcing RPM ceiling: sleeping 15s...")
                     time.sleep(15.0)
                 break
 
@@ -70,7 +70,7 @@ def generate_embeddings_batch(
 
                     if "429" in error_str:
                         wait_time = 75.0
-                        logger.warning("Embedding rate limit 429 hit. Sleeping 60s before retry...")
+                        logger.warning("Embedding rate limit 429 hit. Sleeping 75s before retry...")
                     else:
                         wait_time = 5.0
                         logger.warning("Embedding server error %s. Sleeping 5s before retry...", error_str)
