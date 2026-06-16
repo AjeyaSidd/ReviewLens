@@ -260,8 +260,9 @@ async def retrieve_semantic_context(
             rpc_params["filter_max_rating"] = filter_max_rating
 
         resp = await db.rpc("match_reviews", rpc_params).execute()
-        logger.info("Vector search matched reviews | app_id=%s | query='%s' | matched=%d | threshold=%.1f", 
-        app_id, query, len(reviews), rpc_params["match_threshold"])
+        logger.info(
+        "Vector search matched reviews | app_id=%s | query='%s' | matched=%d | threshold=%.1f",
+        app_id, query, len(resp.data or []), rpc_params["match_threshold"])
         
         return resp.data or []
 
