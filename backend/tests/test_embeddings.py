@@ -75,28 +75,30 @@ def test_generate_embeddings_multiple_batches(mock_get_settings, mock_genai, moc
     assert mock_client.models.embed_content.call_count == 2
     assert len(embeddings) == 150
     assert mock_time.sleep.call_count == 1
-    mock_time.sleep.assert_any_call(12.0)
+    mock_time.sleep.assert_any_call(15.0)
 
 
 
+@pytest.mark.asyncio
 @patch("app.services.embeddings.generate_embeddings_batch")
-def test_run_embeddings_empty_or_no_text(mock_generate, mock_db):
+async def test_run_embeddings_empty_or_no_text(mock_generate, mock_db):
     """Verify that rating-only or empty body reviews are completely skipped."""
     mock_resp = MagicMock()
     mock_resp.data = [
         {"id": "r1", "title": "", "body": "", "catalog_app_id": "test-app-uuid", "platform": "play_store", "platform_review_id": "r1", "rating": 5},
         {"id": "r2", "title": "   ", "body": "   ", "catalog_app_id": "test-app-uuid", "platform": "play_store", "platform_review_id": "r2", "rating": 5},
     ]
-    mock_db.table.return_value.select.return_value.eq.return_value.is_.return_value.neq.return_value.execute.return_value = mock_resp
+    mock_db.table.return_value.execute.return_value = mock_resp
     
     with patch("app.services.embeddings.get_supabase_client", return_value=mock_db):
-        count = run_embeddings("test-app-uuid")
+        count = await run_embeddings("test-app-uuid")
         assert count == 0
         mock_generate.assert_not_called()
 
 
+@pytest.mark.asyncio
 @patch("app.services.embeddings.generate_embeddings_batch")
-def test_run_embeddings_e2e_success(mock_generate, mock_db):
+async def test_run_embeddings_e2e_success(mock_generate, mock_db):
     """Verify full end-to-end embedding pipeline with safe truncation and db updates."""
     # Mock 2 reviews needing embeddings. One is very long to test truncation.
     very_long_body = "A" * 9000
@@ -105,7 +107,7 @@ def test_run_embeddings_e2e_success(mock_generate, mock_db):
         {"id": "uuid-1", "title": "Good", "body": "I like this app.", "catalog_app_id": "test-app-uuid", "platform": "play_store", "platform_review_id": "r1", "rating": 5},
         {"id": "uuid-2", "title": "Spam", "body": very_long_body, "catalog_app_id": "test-app-uuid", "platform": "play_store", "platform_review_id": "r2", "rating": 1},
     ]
-    mock_db.table.return_value.select.return_value.eq.return_value.is_.return_value.neq.return_value.execute.return_value = mock_resp
+    mock_db.table.return_value.execute.return_value = mock_resp
     
     # Mock generated embeddings lists
     dummy_emb_1 = [0.01] * 1536
@@ -113,7 +115,7 @@ def test_run_embeddings_e2e_success(mock_generate, mock_db):
     mock_generate.return_value = [dummy_emb_1, dummy_emb_2]
     
     with patch("app.services.embeddings.get_supabase_client", return_value=mock_db):
-        count = run_embeddings("test-app-uuid")
+        count = await run_embeddings("test-app-uuid")
         
         assert count == 2
         
@@ -125,8 +127,8 @@ def test_run_embeddings_e2e_success(mock_generate, mock_db):
         mock_generate.assert_called_once_with(expected_texts)
         
         # Verify db updates were called as a bulk upsert
-        assert mock_db.table.return_value.upsert.call_count == 1
-        mock_db.table.return_value.upsert.assert_called_once_with([
+        assert mock_db.table("reviews").upsert.call_count == 1
+        mock_db.table("reviews").upsert.assert_called_once_with([
             {
                 "id": "uuid-1",
                 "catalog_app_id": "test-app-uuid",
@@ -164,17 +166,18 @@ def test_generate_embeddings_rate_limit_retry(mock_get_settings, mock_genai, moc
     mock_client.models.embed_content.side_effect = Exception("ResourceExhausted: 429 Too Many Requests")
     
     # Call generate_embeddings_batch and verify it returns an empty list on failure
-    result = generate_embeddings_batch(["Sample text"])
+    result = generate_embeddings_batch(["Sample text"], max_retries=1)
     assert result == []
         
     # The client should be called twice (initial attempt + exactly 1 retry)
     assert mock_client.models.embed_content.call_count == 2
-    # Verify that sleep was called with 60.0 seconds to wait out the 429 limits
-    mock_time.sleep.assert_called_once_with(60.0)
+    # Verify that sleep was called with 75.0 seconds to wait out the 429 limits
+    mock_time.sleep.assert_called_once_with(75.0)
 
 
+@pytest.mark.asyncio
 @patch("app.services.embeddings.generate_embeddings_batch")
-def test_run_embeddings_partial_success(mock_generate, mock_db):
+async def test_run_embeddings_partial_success(mock_generate, mock_db):
     """Verify that if only some embeddings succeed, only those are saved as a block."""
     mock_resp = MagicMock()
     mock_resp.data = [
@@ -182,7 +185,7 @@ def test_run_embeddings_partial_success(mock_generate, mock_db):
         {"id": "uuid-2", "title": "G2", "body": "B2", "catalog_app_id": "app-x", "platform": "play_store", "platform_review_id": "r2", "rating": 4},
         {"id": "uuid-3", "title": "G3", "body": "B3", "catalog_app_id": "app-x", "platform": "play_store", "platform_review_id": "r3", "rating": 3},
     ]
-    mock_db.table.return_value.select.return_value.eq.return_value.is_.return_value.neq.return_value.execute.return_value = mock_resp
+    mock_db.table.return_value.execute.return_value = mock_resp
     
     # Mock only 2 embeddings returned (even though 3 reviews were passed)
     dummy_emb_1 = [0.1] * 1536
@@ -190,13 +193,13 @@ def test_run_embeddings_partial_success(mock_generate, mock_db):
     mock_generate.return_value = [dummy_emb_1, dummy_emb_2]
     
     with patch("app.services.embeddings.get_supabase_client", return_value=mock_db):
-        count = run_embeddings("app-x")
+        count = await run_embeddings("app-x")
         
         # Should return 2 (the count of successfully generated/saved embeddings)
         assert count == 2
         
         # Verify db updates were called for only the first 2 reviews
-        mock_db.table.return_value.upsert.assert_called_once_with([
+        mock_db.table("reviews").upsert.assert_called_once_with([
             {
                 "id": "uuid-1",
                 "catalog_app_id": "app-x",

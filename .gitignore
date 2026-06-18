@@ -30,3 +30,7 @@ backend/logs/
 Thumbs.db
 .idea/
 .vscode/
+
+# Temporary / Scratch
+scratch/
+

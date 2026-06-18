@@ -50,7 +50,8 @@ def test_analyze_sentiment_empty_input():
 
 from unittest.mock import MagicMock, patch
 
-def test_run_sentiment_includes_empty_body_reviews(mock_db):
+@pytest.mark.asyncio
+async def test_run_sentiment_includes_empty_body_reviews(mock_db):
     """Verify that _run_sentiment does not skip reviews with empty title/body."""
     from app.services.sync_app import _run_sentiment
     
@@ -75,17 +76,17 @@ def test_run_sentiment_includes_empty_body_reviews(mock_db):
             "platform_review_id": "i-empty"
         }
     ]
-    mock_db.table.return_value.select.return_value.eq.return_value.is_.return_value.execute.return_value = mock_resp
+    mock_db.table.return_value.execute.return_value = mock_resp
     
     with patch("app.services.sync_app.get_supabase_client", return_value=mock_db):
-        count = _run_sentiment("test-app-uuid")
+        count = await _run_sentiment("test-app-uuid")
         
         # Verify both reviews were processed
         assert count == 2
         
         # Verify bulk upsert was called with correct sentiment results
-        assert mock_db.table.return_value.upsert.call_count == 1
-        upserted_rows = mock_db.table.return_value.upsert.call_args[0][0]
+        assert mock_db.table("reviews").upsert.call_count == 1
+        upserted_rows = mock_db.table("reviews").upsert.call_args[0][0]
         assert len(upserted_rows) == 2
         
         # Row 1 (rating 5 -> positive, score 1.0)

@@ -56,15 +56,15 @@ def test_extract_metadata_filters_versions():
     """Verify regex correctly parses version filters."""
     # 1. Minimum version
     filters = extract_metadata_filters("complaints since version 20.96")
-    assert filters == {"filter_min_version": 20.96}
+    assert filters == {"filter_min_version": "20.96"}
     
     # 2. Maximum version
     filters = extract_metadata_filters("stability issues before v20.95")
-    assert filters == {"filter_max_version": 20.95}
+    assert filters == {"filter_max_version": "20.95"}
     
     # 3. Exact version
     filters = extract_metadata_filters("crashes on version 20.99")
-    assert filters == {"filter_min_version": 20.99, "filter_max_version": 20.99}
+    assert filters == {"filter_min_version": "20.99", "filter_max_version": "20.99"}
 
 
 def test_extract_metadata_filters_ratings():
@@ -137,7 +137,7 @@ async def test_run_hybrid_rag_success(mock_get_settings, mock_retrieve_trends, m
     mock_retrieve_semantic.assert_called_once_with(
         app_id="test-app-id",
         query="Show ratings and crashes since 2026-01-01",
-        limit=20,
+        limit=30,
         filter_from_date="2026-01-01"
     )
 

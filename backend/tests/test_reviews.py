@@ -22,8 +22,8 @@ class TestReviewsEndpoint:
     def test_reviews_app_not_found(self, client, mock_db):
         """Should return 404 if app doesn't exist."""
         app_resp = MagicMock()
-        app_resp.data = {}
-        mock_db.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = app_resp
+        app_resp.data = []
+        mock_db.table("catalog_apps").select.return_value.eq.return_value.single.return_value.execute.return_value = app_resp
         
         response = client.get("/apps/non-existent-uuid/reviews")
         assert response.status_code == 404
@@ -32,7 +32,7 @@ class TestReviewsEndpoint:
         """Should return 404 if app is deactivated."""
         app_resp = MagicMock()
         app_resp.data = {"id": "test-uuid", "is_active": False}
-        mock_db.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = app_resp
+        mock_db.table("catalog_apps").select.return_value.eq.return_value.single.return_value.execute.return_value = app_resp
         
         response = client.get("/apps/test-uuid/reviews")
         assert response.status_code == 404
@@ -51,9 +51,9 @@ class TestReviewsEndpoint:
         ]
         
         # Setup mocks chain
-        mock_db.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = app_resp
+        mock_db.table("catalog_apps").select.return_value.eq.return_value.single.return_value.execute.return_value = app_resp
         
-        query_mock = mock_db.table.return_value.select.return_value.eq.return_value
+        query_mock = mock_db.table("reviews").select.return_value.eq.return_value
         neq_mock = query_mock.neq.return_value
         neq_mock.order.return_value.range.return_value.execute.return_value = reviews_resp
         

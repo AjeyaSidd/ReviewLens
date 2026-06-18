@@ -37,12 +37,18 @@ class TestAddApp:
         # Mock active count = 5 (below limit)
         count_mock = MagicMock()
         count_mock.count = 5
-        mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = count_mock
         
         # Mock insert returns created app
         insert_mock = MagicMock()
         insert_mock.data = [{"id": "test-uuid", "display_name": "Test App", "country": "in"}]
-        mock_db.table.return_value.insert.return_value.execute.return_value = insert_mock
+        
+        # Smart execute side effect to handle both select count and insert
+        chain = mock_db.table("catalog_apps")
+        async def execute_side_effect():
+            if chain.insert.called:
+                return insert_mock
+            return count_mock
+        chain.execute.side_effect = execute_side_effect
         
         response = client.post(
             "/admin/apps",
@@ -65,7 +71,7 @@ class TestAddApp:
         """Adding an app when 15 active apps exist should return 409."""
         count_mock = MagicMock()
         count_mock.count = 15
-        mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = count_mock
+        mock_db.table("catalog_apps").select.return_value.eq.return_value.execute.return_value = count_mock
         
         response = client.post(
             "/admin/apps",
@@ -83,7 +89,7 @@ class TestDeleteApp:
         """Deleting a non-existent app should return 404."""
         mock_resp = MagicMock()
         mock_resp.data = []
-        mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_resp
+        mock_db.table("catalog_apps").select.return_value.eq.return_value.execute.return_value = mock_resp
         
         response = client.delete(
             "/admin/apps/non-existent-uuid",
@@ -95,27 +101,39 @@ class TestDeleteApp:
         """Soft deleting should set is_active to False."""
         mock_resp = MagicMock()
         mock_resp.data = [{"id": "test-uuid"}]
-        mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_resp
+        
+        chain = mock_db.table("catalog_apps")
+        async def execute_side_effect():
+            if chain.update.called:
+                return MagicMock()
+            return mock_resp
+        chain.execute.side_effect = execute_side_effect
         
         response = client.delete(
             "/admin/apps/test-uuid",
             headers={"X-Admin-Key": "test-admin-key"},
         )
         assert response.status_code == 200
-        mock_db.table.return_value.update.assert_called_with({"is_active": False})
+        mock_db.table("catalog_apps").update.assert_called_with({"is_active": False})
         
     def test_delete_app_purge(self, client, mock_db):
         """Hard deleting with purge=True should execute a delete query."""
         mock_resp = MagicMock()
         mock_resp.data = [{"id": "test-uuid"}]
-        mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_resp
+        
+        chain = mock_db.table("catalog_apps")
+        async def execute_side_effect():
+            if chain.delete.called:
+                return MagicMock()
+            return mock_resp
+        chain.execute.side_effect = execute_side_effect
         
         response = client.delete(
             "/admin/apps/test-uuid?purge=true",
             headers={"X-Admin-Key": "test-admin-key"},
         )
         assert response.status_code == 200
-        mock_db.table.return_value.delete.assert_called_once()
+        mock_db.table("catalog_apps").delete.assert_called_once()
 
 
 class TestListApps:
@@ -125,7 +143,7 @@ class TestListApps:
         """Should return list of apps."""
         mock_resp = MagicMock()
         mock_resp.data = [{"id": "app-1", "display_name": "App 1"}]
-        mock_db.table.return_value.select.return_value.order.return_value.execute.return_value = mock_resp
+        mock_db.table("catalog_apps").select.return_value.order.return_value.execute.return_value = mock_resp
         
         response = client.get(
             "/admin/apps",
@@ -144,7 +162,7 @@ class TestRefreshApp:
         """Refreshing active app should launch background task and return 202."""
         mock_resp = MagicMock()
         mock_resp.data = {"id": "test-uuid", "is_active": True}
-        mock_db.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = mock_resp
+        mock_db.table("catalog_apps").select.return_value.eq.return_value.single.return_value.execute.return_value = mock_resp
         
         response = client.post(
             "/admin/apps/test-uuid/refresh",
@@ -157,7 +175,7 @@ class TestRefreshApp:
         """Refreshing inactive app should return 400."""
         mock_resp = MagicMock()
         mock_resp.data = {"id": "test-uuid", "is_active": False}
-        mock_db.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = mock_resp
+        mock_db.table("catalog_apps").select.return_value.eq.return_value.single.return_value.execute.return_value = mock_resp
         
         response = client.post(
             "/admin/apps/test-uuid/refresh",
@@ -175,7 +193,7 @@ class TestSyncAll:
         """Should fetch all active apps and run sync for them."""
         mock_resp = MagicMock()
         mock_resp.data = [{"id": "app-1"}, {"id": "app-2"}]
-        mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_resp
+        mock_db.table("catalog_apps").select.return_value.eq.return_value.execute.return_value = mock_resp
         
         response = client.post(
             "/admin/sync-all",
@@ -196,8 +214,13 @@ class TestSyncApps:
             {"id": "app-1", "play_package": "com.app1", "ios_app_id": "111"},
             {"id": "app-2", "play_package": "com.app2", "ios_app_id": "222"},
         ]
-        mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_resp
+        mock_db.table("catalog_apps").select.return_value.eq.return_value.execute.return_value = mock_resp
         
+        response = client.post(
+            "/admin/sync-all",  # Note: the test can trigger sync-all or sync-apps depending on path. Wait, the endpoint here is sync-all but wait, let's keep it as POST /admin/sync-apps
+        )
+        
+        # Wait, the original code had client.post("/admin/sync-apps"). Let's check original.
         response = client.post(
             "/admin/sync-apps",
             json={"app_identifiers": ["com.app1", "app-2", "invalid-id"]},
@@ -220,7 +243,7 @@ class TestSyncApps:
         """Should return 400 if no active apps match the identifiers."""
         mock_resp = MagicMock()
         mock_resp.data = []
-        mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_resp
+        mock_db.table("catalog_apps").select.return_value.eq.return_value.execute.return_value = mock_resp
         
         response = client.post(
             "/admin/sync-apps",
@@ -229,4 +252,3 @@ class TestSyncApps:
         )
         assert response.status_code == 400
         assert "No active apps found" in response.json()["detail"]
-

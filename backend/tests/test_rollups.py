@@ -18,7 +18,8 @@ def client(mock_settings, mock_db):
     app.dependency_overrides.clear()
 
 
-def test_recompute_rollups_mathematical_accuracy(mock_db):
+@pytest.mark.asyncio
+async def test_recompute_rollups_mathematical_accuracy(mock_db):
     """Verify daily rollups correctly average ratings/sentiments and sum stars by date."""
     mock_resp = MagicMock()
     mock_resp.data = [
@@ -29,17 +30,17 @@ def test_recompute_rollups_mathematical_accuracy(mock_db):
         # 2026-05-19 reviews
         {"review_date": "2026-05-19", "rating": 1, "sentiment_score": -0.9},
     ]
-    mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_resp
+    mock_db.table.return_value.execute.return_value = mock_resp
     
     with patch("app.services.rollups.get_supabase_client", return_value=mock_db):
-        unique_dates = recompute_daily_rollups("test-app-uuid")
+        unique_dates = await recompute_daily_rollups("test-app-uuid")
         
         assert unique_dates == 2
         
         # Verify bulk upsert was executed
-        assert mock_db.table.return_value.upsert.call_count == 1
+        assert mock_db.table("daily_rollups").upsert.call_count == 1
         
-        upserted_rows = mock_db.table.return_value.upsert.call_args[0][0]
+        upserted_rows = mock_db.table("daily_rollups").upsert.call_args[0][0]
         assert len(upserted_rows) == 2
         
         # Find rolled up rows
@@ -61,16 +62,17 @@ def test_recompute_rollups_mathematical_accuracy(mock_db):
         assert row_19["star_5"] == 0
 
 
-def test_recompute_rollups_empty(mock_db):
+@pytest.mark.asyncio
+async def test_recompute_rollups_empty(mock_db):
     """Verify rollups gracefully skips calculations if no reviews exist."""
     mock_resp = MagicMock()
     mock_resp.data = []
-    mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_resp
+    mock_db.table.return_value.execute.return_value = mock_resp
     
     with patch("app.services.rollups.get_supabase_client", return_value=mock_db):
-        unique_dates = recompute_daily_rollups("test-app-uuid")
+        unique_dates = await recompute_daily_rollups("test-app-uuid")
         assert unique_dates == 0
-        mock_db.table.return_value.upsert.assert_not_called()
+        mock_db.table("daily_rollups").upsert.assert_not_called()
 
 
 class TestTrendsEndpoint:
@@ -79,8 +81,8 @@ class TestTrendsEndpoint:
     def test_trends_app_not_found(self, client, mock_db):
         """Should return 404 if app doesn't exist."""
         app_resp = MagicMock()
-        app_resp.data = {}
-        mock_db.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = app_resp
+        app_resp.data = []
+        mock_db.table("catalog_apps").select.return_value.eq.return_value.single.return_value.execute.return_value = app_resp
         
         response = client.get("/apps/non-existent-uuid/trends")
         assert response.status_code == 404
@@ -89,7 +91,7 @@ class TestTrendsEndpoint:
         """Should return 404 if app is deactivated."""
         app_resp = MagicMock()
         app_resp.data = {"id": "test-uuid", "is_active": False}
-        mock_db.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = app_resp
+        mock_db.table("catalog_apps").select.return_value.eq.return_value.single.return_value.execute.return_value = app_resp
         
         response = client.get("/apps/test-uuid/trends")
         assert response.status_code == 404
@@ -108,9 +110,9 @@ class TestTrendsEndpoint:
         ]
         
         # Setup mocks chain
-        mock_db.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = app_resp
+        mock_db.table("catalog_apps").select.return_value.eq.return_value.single.return_value.execute.return_value = app_resp
         
-        query_mock = mock_db.table.return_value.select.return_value.eq.return_value
+        query_mock = mock_db.table("daily_rollups").select.return_value.eq.return_value
         query_mock.gte.return_value.lte.return_value.order.return_value.execute.return_value = rollups_resp
         
         response = client.get("/apps/test-uuid/trends?from_date=2026-05-19&to_date=2026-05-20")

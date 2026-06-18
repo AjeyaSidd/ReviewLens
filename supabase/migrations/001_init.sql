@@ -18,6 +18,7 @@ CREATE TABLE catalog_apps (
     last_synced_at  TIMESTAMPTZ,
     review_count    INT DEFAULT 0,
     created_at      TIMESTAMPTZ DEFAULT now(),
+    app_icon_url    TEXT,
 
     -- At least one store identifier must be provided
     CONSTRAINT at_least_one_store CHECK (play_package IS NOT NULL OR ios_app_id IS NOT NULL)
@@ -41,6 +42,9 @@ CREATE TABLE reviews (
     sentiment_score     FLOAT,
     embedding           vector(1536),
     scraped_at          TIMESTAMPTZ DEFAULT now(),
+    app_version_numeric double precision GENERATED ALWAYS AS (
+        (substring(app_version from '^[vV]?([0-9]+(?:\.[0-9]+)?)'))::double precision
+    ) STORED,
 
     -- Prevent duplicate reviews per app+platform
     UNIQUE (catalog_app_id, platform, platform_review_id)

@@ -328,7 +328,7 @@ async def run_hybrid_rag(app_id: str, query: str) -> dict:
             retrieve_semantic_context(
                 app_id=app_id,
                 query=query,
-                limit=20,
+                limit=30,
                 **filters,
             ),
         )
