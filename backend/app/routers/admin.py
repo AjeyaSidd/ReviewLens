@@ -105,26 +105,55 @@ async def refresh_app(app_id: str, db=Depends(get_db)):
 
 
 @router.post("/sync-all", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_admin_key)])
-async def sync_all_apps(db=Depends(get_db)):
-    """Trigger background sync for all active apps. Returns 202 immediately."""
+async def sync_all_apps(limit: int = 1, db=Depends(get_db)):
+    """Trigger background sync for active apps, starting with the oldest synced.
 
-    # ✅ await added
-    result = await db.table("catalog_apps").select("id").eq("is_active", True).execute()
-    app_ids = [app["id"] for app in (result.data or [])]
+    Accepts a limit parameter (defaulting to 1) to prevent rate limits.
+    """
+    from datetime import datetime, timezone
 
-    if not app_ids:
-        return {"detail": "No active apps to sync", "count": 0}
+    # Fetch all active apps with their last_synced_at timestamps
+    result = await db.table("catalog_apps").select("id, last_synced_at").eq("is_active", True).execute()
+    apps = result.data or []
 
-    async def _sync_all():
-        for aid in app_ids:
+    if not apps:
+        return {"detail": "No active apps to sync", "count": 0, "synced_app_ids": [], "skipped_app_ids": []}
+
+    # Sort in Python: Never synced (None) first, then oldest synced
+    def get_sync_time(app):
+        val = app.get("last_synced_at")
+        if not val:
+            return datetime.min.replace(tzinfo=timezone.utc)
+        try:
+            return datetime.fromisoformat(val)
+        except Exception:
+            return datetime.min.replace(tzinfo=timezone.utc)
+
+    apps.sort(key=get_sync_time)
+
+    # Slice to limit
+    selected_apps = apps[:limit]
+    selected_app_ids = [app["id"] for app in selected_apps]
+    skipped_app_ids = [app["id"] for app in apps[limit:]]
+
+    async def _sync_selected():
+        for aid in selected_app_ids:
             try:
                 await sync_app(aid)
             except Exception as e:
                 logger.error("Sync failed for app %s during sync-all: %s", aid, str(e))
 
-    asyncio.create_task(_sync_all())
-    logger.info("Sync-all triggered | apps=%d", len(app_ids))
-    return {"detail": f"Sync started for {len(app_ids)} apps", "count": len(app_ids)}
+    asyncio.create_task(_sync_selected())
+    logger.info(
+        "Sync-all triggered | limit=%d | syncing=%d | skipped=%d",
+        limit, len(selected_app_ids), len(skipped_app_ids)
+    )
+    return {
+        "detail": f"Sync started for {len(selected_app_ids)} apps ({len(skipped_app_ids)} skipped)",
+        "count": len(selected_app_ids),
+        "synced_app_ids": selected_app_ids,
+        "skipped_app_ids": [app["id"] for app in apps[limit:]],
+    }
 
 
 @router.post("/sync-apps", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(verify_admin_key)])

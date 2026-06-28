@@ -189,10 +189,15 @@ class TestSyncAll:
     """Test POST /admin/sync-all."""
     
     @patch("app.routers.admin.sync_app", new_callable=AsyncMock)
-    def test_sync_all_success(self, mock_sync_app, client, mock_db):
-        """Should fetch all active apps and run sync for them."""
+    def test_sync_all_default_limit(self, mock_sync_app, client, mock_db):
+        """Should default limit to 1 and sync the oldest/never synced app."""
         mock_resp = MagicMock()
-        mock_resp.data = [{"id": "app-1"}, {"id": "app-2"}]
+        # app-2 has newer sync time, app-1 has older, app-3 has never synced (None)
+        mock_resp.data = [
+            {"id": "app-1", "last_synced_at": "2026-06-28T10:00:00Z"},
+            {"id": "app-2", "last_synced_at": "2026-06-28T11:00:00Z"},
+            {"id": "app-3", "last_synced_at": None},
+        ]
         mock_db.table("catalog_apps").select.return_value.eq.return_value.execute.return_value = mock_resp
         
         response = client.post(
@@ -200,7 +205,36 @@ class TestSyncAll:
             headers={"X-Admin-Key": "test-admin-key"},
         )
         assert response.status_code == 202
-        assert response.json()["count"] == 2
+        data = response.json()
+        assert data["count"] == 1
+        assert data["synced_app_ids"] == ["app-3"]  # Never synced first
+        assert set(data["skipped_app_ids"]) == {"app-1", "app-2"}
+        mock_sync_app.assert_called_once_with("app-3")
+
+    @patch("app.routers.admin.sync_app", new_callable=AsyncMock)
+    def test_sync_all_custom_limit(self, mock_sync_app, client, mock_db):
+        """Should respect the custom limit parameter and sort correctly."""
+        mock_resp = MagicMock()
+        mock_resp.data = [
+            {"id": "app-1", "last_synced_at": "2026-06-28T10:00:00Z"},
+            {"id": "app-2", "last_synced_at": "2026-06-28T11:00:00Z"},
+            {"id": "app-3", "last_synced_at": None},
+        ]
+        mock_db.table("catalog_apps").select.return_value.eq.return_value.execute.return_value = mock_resp
+        
+        response = client.post(
+            "/admin/sync-all?limit=2",
+            headers={"X-Admin-Key": "test-admin-key"},
+        )
+        assert response.status_code == 202
+        data = response.json()
+        assert data["count"] == 2
+        # app-3 (never synced) and app-1 (older synced) should be selected
+        assert data["synced_app_ids"] == ["app-3", "app-1"]
+        assert data["skipped_app_ids"] == ["app-2"]
+        assert mock_sync_app.call_count == 2
+        mock_sync_app.assert_any_call("app-3")
+        mock_sync_app.assert_any_call("app-1")
 
 
 class TestSyncApps:
