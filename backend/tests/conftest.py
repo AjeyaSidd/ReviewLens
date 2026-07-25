@@ -38,6 +38,8 @@ def mock_settings():
     settings.cors_origin_list = ["http://localhost:3000"]
     settings.log_dir = "backend/logs"
     settings.log_level = "INFO"
+    settings.rag_review_limit = 30
+    settings.rag_match_threshold = 0.3
     return settings
 
 

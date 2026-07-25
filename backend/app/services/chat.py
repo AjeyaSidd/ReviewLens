@@ -216,7 +216,7 @@ def extract_metadata_filters(query: str) -> dict:
 async def retrieve_semantic_context(
     app_id: str,
     query: str,
-    limit: int = 20,
+    limit: int | None = None,
     filter_from_date: str | None = None,
     filter_to_date: str | None = None,
     filter_min_version: str | None = None,
@@ -226,6 +226,10 @@ async def retrieve_semantic_context(
 ) -> list[dict]:
     """Retrieve top K reviews via semantic vector search with metadata filters."""
     try:
+        settings = get_settings()
+        effective_limit = limit if limit is not None else settings.rag_review_limit
+        effective_threshold = settings.rag_match_threshold
+
         # Embedding generation is still sync (Google SDK) — kept on thread
         query_vectors = await asyncio.to_thread(
             generate_embeddings_batch,
@@ -241,8 +245,8 @@ async def retrieve_semantic_context(
 
         rpc_params = {
             "query_embedding": query_vector,
-            "match_threshold": 0.3,
-            "match_count": limit,
+            "match_threshold": effective_threshold,
+            "match_count": effective_limit,
             "filter_app_id": app_id,
         }
 
@@ -261,8 +265,9 @@ async def retrieve_semantic_context(
 
         resp = await db.rpc("match_reviews", rpc_params).execute()
         logger.info(
-        "Vector search matched reviews | app_id=%s | query='%s' | matched=%d | threshold=%.1f",
-        app_id, query, len(resp.data or []), rpc_params["match_threshold"])
+            "Vector search matched reviews | app_id=%s | query='%s' | matched=%d | threshold=%.2f | limit=%d",
+            app_id, query, len(resp.data or []), effective_threshold, effective_limit
+        )
         
         return resp.data or []
 
@@ -328,7 +333,7 @@ async def run_hybrid_rag(app_id: str, query: str) -> dict:
             retrieve_semantic_context(
                 app_id=app_id,
                 query=query,
-                limit=30,
+                limit=settings.rag_review_limit,
                 **filters,
             ),
         )

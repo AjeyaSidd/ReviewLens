@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     log_dir: str = "backend/logs"
     log_level: str = "INFO"
+    rag_review_limit: int = 30
+    rag_match_threshold: float = 0.3
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -94,6 +94,8 @@ async def test_run_hybrid_rag_success(mock_get_settings, mock_retrieve_trends, m
     """Verify RAG orchestrator executes concurrently and returns cited response."""
     mock_settings = MagicMock()
     mock_settings.gemini_sentiment_model = "gemini-2.0-flash"
+    mock_settings.rag_review_limit = 30
+    mock_settings.rag_match_threshold = 0.3
     mock_get_settings.return_value = mock_settings
     
     # Mock concurrent retrieval calls
