@@ -66,6 +66,18 @@ function renderMarkdown(text: string): React.ReactNode {
 }
 
 
+interface ThemeBreakdown {
+  theme: string;
+  count: number;
+  percentage: number;
+}
+
+interface Metrics {
+  sample_size?: number;
+  theme_breakdown?: ThemeBreakdown[];
+  [key: string]: any;
+}
+
 interface Citation {
   review_id: string;
   platform: string;
@@ -77,7 +89,7 @@ interface Citation {
 interface Message {
   sender: "user" | "assistant";
   text: string;
-  metrics?: any;
+  metrics?: Metrics;
   citations?: Citation[];
 }
 
@@ -183,6 +195,42 @@ export default function ChatPanel({
               {msg.sender === "user" ? msg.text : renderMarkdown(msg.text)}
             </div>
 
+            {/* Quantitative Breakdown Widget */}
+            {msg.metrics?.theme_breakdown && msg.metrics.theme_breakdown.length > 0 && (
+              <div className="mt-3 w-full rounded-xl border border-indigo-500/30 bg-[#121829] p-4 text-xs shadow-lg">
+                <div className="flex justify-between items-center mb-3 border-b border-gray-800/80 pb-2">
+                  <span className="font-bold text-indigo-400 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <span>📊</span> Feedback Breakdown
+                  </span>
+                  {msg.metrics.sample_size && (
+                    <span className="text-gray-400 text-[11px] font-medium">
+                      Based on {msg.metrics.sample_size} analyzed reviews
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-2.5">
+                  {msg.metrics.theme_breakdown.map((item: ThemeBreakdown, idx: number) => {
+                    const pct = Math.min(Math.max(item.percentage || 0, 0), 100);
+                    return (
+                      <div key={idx} className="space-y-1">
+                        <div className="flex justify-between text-gray-300 font-medium">
+                          <span className="truncate pr-2">{item.theme}</span>
+                          <span className="text-indigo-300 flex-shrink-0 font-semibold">
+                            {pct.toFixed(1)}% ({item.count} reviews)
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full bg-gray-900 rounded-full overflow-hidden border border-gray-800">
+                          <div
+                            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* RAG Citations cards */}
             {msg.citations && msg.citations.length > 0 && (

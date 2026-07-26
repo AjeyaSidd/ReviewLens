@@ -115,7 +115,14 @@ async def test_run_hybrid_rag_success(mock_get_settings, mock_retrieve_trends, m
     mock_response = MagicMock()
     mock_response.text = json.dumps({
         "answer": "Average rating is 4.5, but users complain about crashes.",
-        "metrics": {"avg_rating": 4.5, "total_reviews": 10},
+        "metrics": {
+            "avg_rating": 4.5,
+            "total_reviews": 10,
+            "sample_size": 30,
+            "theme_breakdown": [
+                {"theme": "App Crashes", "count": 5, "percentage": 16.7}
+            ]
+        },
         "citations": [
             {
                 "review_id": "uuid-1",
