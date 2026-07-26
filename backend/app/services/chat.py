@@ -274,6 +274,7 @@ async def retrieve_semantic_context(
         if filter_max_rating is not None:
             rpc_params["filter_max_rating"] = filter_max_rating
 
+        resp = await db.rpc("match_reviews", rpc_params).execute()
         matched_reviews = resp.data or []
         scores_str = " | ".join(f"{r.get('similarity', 0):.3f}" for r in matched_reviews)
         logger.info(
