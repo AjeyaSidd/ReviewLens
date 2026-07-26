@@ -106,6 +106,21 @@ def test_is_comparison_query():
     assert is_comparison_query("just general question") is False
 
 
+def test_clean_query_for_embedding():
+    """Verify clean_query_for_embedding removes metadata/platform noise but preserves topic content or falls back."""
+    from app.services.chat import clean_query_for_embedding
+    
+    assert clean_query_for_embedding("1-star reviews mentioning UPI in the last month") == "upi"
+    assert clean_query_for_embedding("show iOS login bugs") == "login bugs"
+    assert clean_query_for_embedding("Compare positive and negative feedback between iOS and Android") == "positive negative feedback"
+    assert clean_query_for_embedding("crashes on startup") == "crashes startup"
+    
+    # Pure metadata / empty fallback case
+    assert clean_query_for_embedding("show me 1-star reviews") == "show me 1-star reviews"
+    assert clean_query_for_embedding("weather forecast for tomorrow") == "weather forecast tomorrow"
+
+
+
 
 @pytest.mark.asyncio
 @patch("app.services.chat.genai")
@@ -167,7 +182,7 @@ async def test_run_hybrid_rag_success(mock_get_settings, mock_retrieve_trends, m
     # Verify metadata-aware filters were forwarded to retrieve_semantic_context
     mock_retrieve_semantic.assert_called_once_with(
         app_id="test-app-id",
-        query="Show ratings and crashes since 2026-01-01",
+        query="ratings crashes",
         limit=30,
         filter_from_date="2026-01-01"
     )

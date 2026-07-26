@@ -380,6 +380,77 @@ def _parse_rag_response(response_text: str) -> dict:
         }
 
 
+def clean_query_for_embedding(query: str) -> str:
+    """
+    Separate metadata/structural intent from core content intent.
+    Strips date, rating, version, platform, comparison, and preamble filler keywords
+    before sending text to the embedding model.
+    Falls back to the original query if stripping leaves empty/sparse text.
+    """
+    if not query:
+        return query
+
+    cleaned = query.lower()
+
+    # 1. Date patterns
+    date_patterns = [
+        r'(?:in\s+the\s+|over\s+the\s+)?(?:last|past)\s+(?:the\s+)?(?:\d+\s+)?(?:days?|weeks?|months?|years?)',
+        r'(?:since|after|from|before|until)\s+\d{4}-\d{2}-\d{2}',
+        r'(?:since|after|from)\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\w*\s*(?:\d{1,2})?(?:st|nd|rd|th)?\s*,?\s*\d{4}',
+    ]
+    for p in date_patterns:
+        cleaned = re.sub(p, ' ', cleaned, flags=re.IGNORECASE)
+
+    # 2. Rating patterns
+    rating_patterns = [
+        r'(?:below|less than|under|lower than|above|greater than|more than|at least|over)\s+\d\s*(?:stars?|\*)',
+        r'\d\s*(?:stars?|\*)?\s*(?:and|to|or|-|vs\.?|versus)\s*\d\s*(?:stars?|\*)',
+        r'\d\s*-\s*stars?',
+        r'\b\d\s*stars?\b',
+        r'\d\s*\*|\b\d\s*star\s*rating\b',
+    ]
+    for p in rating_patterns:
+        cleaned = re.sub(p, ' ', cleaned, flags=re.IGNORECASE)
+
+    # 3. Version patterns
+    version_patterns = [
+        r'(?:since|after|above|from|starting|before|below|under|up\s+to)\s+(?:app\s+)?(?:version\s+|v\s*)?\d+\.\d+',
+        r'\d+\.\d+\s+(?:and\s+)?(?:above|later|newer|onwards?|below|earlier|older)',
+        r'(?:(?:app\s+)?version\s+|v\s*)\d+\.\d+',
+    ]
+    for p in version_patterns:
+        cleaned = re.sub(p, ' ', cleaned, flags=re.IGNORECASE)
+
+    # 4. Platform & comparison patterns
+    platform_patterns = [
+        r'\b(?:ios|iphone|ipad|app\s*store|apple)\b',
+        r'\b(?:android|play\s*store|playstore|google\s*play)\b',
+        r'\b(?:compare|vs\.?|versus|difference\s+between|across\s+platforms|both\s+stores)\b',
+    ]
+    for p in platform_patterns:
+        cleaned = re.sub(p, ' ', cleaned, flags=re.IGNORECASE)
+
+    # 5. Preamble & filler noise
+    filler_patterns = [
+        r'\b(?:show\s+(?:me\s+)?|what\s+do\s+users\s+say\s+about|what\s+are\s+(?:people|users)\s+saying\s+about|are\s+there\s+any|user\s+complaints\s+regarding|feedback\s+about|reviews?\s+about|reviews?\s+mentioning|reviews?\s+for|reviews?|between)\b',
+    ]
+    for p in filler_patterns:
+        cleaned = re.sub(p, ' ', cleaned, flags=re.IGNORECASE)
+
+    # Clean up whitespace and punctuation
+    cleaned = re.sub(r'[^\w\s]', ' ', cleaned)
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+
+    # Fallback to original query if stripped query is too short or empty
+    stop_words = {"the", "a", "an", "for", "in", "on", "to", "and", "or", "of", "with", "about", "is", "are"}
+    meaningful_words = [w for w in cleaned.split() if w not in stop_words and len(w) > 1]
+
+    if not meaningful_words or len(" ".join(meaningful_words)) < 3:
+        return query
+
+    return " ".join(meaningful_words)
+
+
 async def run_hybrid_rag(app_id: str, query: str) -> dict:
     """Coordinate async parallel context retrieval and Gemini answer synthesis."""
     try:
@@ -390,10 +461,11 @@ async def run_hybrid_rag(app_id: str, query: str) -> dict:
         filters = extract_metadata_filters(query)
         platform_filter = extract_platform_filter(query)
         is_comparison = is_comparison_query(query)
+        semantic_query = clean_query_for_embedding(query)
         
         logger.info(
-            "Extracted metadata filters | query='%s' | filters=%s | platform=%s | is_comparison=%s",
-            query, filters, platform_filter, is_comparison
+            "Query semantic separation | raw_query='%s' | embedding_query='%s' | filters=%s | platform=%s | is_comparison=%s",
+            query, semantic_query, filters, platform_filter, is_comparison
         )
 
         # 2. Retrieve contexts concurrently — parallel DB calls
@@ -403,14 +475,14 @@ async def run_hybrid_rag(app_id: str, query: str) -> dict:
                 retrieve_trends_context(app_id),
                 retrieve_semantic_context(
                     app_id=app_id,
-                    query=query,
+                    query=semantic_query,
                     limit=platform_limit,
                     filter_platform="app_store",
                     **filters,
                 ),
                 retrieve_semantic_context(
                     app_id=app_id,
-                    query=query,
+                    query=semantic_query,
                     limit=platform_limit,
                     filter_platform="play_store",
                     **filters,
@@ -424,7 +496,7 @@ async def run_hybrid_rag(app_id: str, query: str) -> dict:
                 retrieve_trends_context(app_id),
                 retrieve_semantic_context(
                     app_id=app_id,
-                    query=query,
+                    query=semantic_query,
                     limit=settings.rag_review_limit,
                     **filters,
                 ),
