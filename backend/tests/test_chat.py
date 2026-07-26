@@ -85,6 +85,28 @@ def test_extract_metadata_filters_ratings():
     assert filters == {"filter_min_rating": 1, "filter_max_rating": 1}
 
 
+def test_extract_platform_filter():
+    """Verify platform extraction detects ios and android keywords properly."""
+    from app.services.chat import extract_platform_filter
+    assert extract_platform_filter("show iOS bugs") == "app_store"
+    assert extract_platform_filter("iphone crashes") == "app_store"
+    assert extract_platform_filter("android login issue") == "play_store"
+    assert extract_platform_filter("google play store reviews") == "play_store"
+    assert extract_platform_filter("compare iOS and Android") is None
+    assert extract_platform_filter("general feedback") is None
+
+
+def test_is_comparison_query():
+    """Verify comparison query detection works for keywords and dual platform queries."""
+    from app.services.chat import is_comparison_query
+    assert is_comparison_query("Compare positive and negative feedback between iOS and Android") is True
+    assert is_comparison_query("iOS vs Android complaints") is True
+    assert is_comparison_query("difference between stores") is True
+    assert is_comparison_query("iOS bugs only") is False
+    assert is_comparison_query("just general question") is False
+
+
+
 @pytest.mark.asyncio
 @patch("app.services.chat.genai")
 @patch("app.services.chat.retrieve_semantic_context")

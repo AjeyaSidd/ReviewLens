@@ -224,6 +224,52 @@ def extract_metadata_filters(query: str) -> dict:
     return filters
 
 
+def extract_platform_filter(query: str) -> str | None:
+    """
+    Detect platform intent via keywords:
+    - ios, iphone, ipad, app store, apple -> "app_store"
+    - android, play store, playstore, google play -> "play_store"
+    Return None if ambiguous (both present) or neither present.
+    """
+    query_lower = query.lower()
+    
+    ios_pattern = r'\b(?:ios|iphone|ipad|app\s*store|apple)\b'
+    android_pattern = r'\b(?:android|play\s*store|playstore|google\s*play)\b'
+    
+    has_ios = bool(re.search(ios_pattern, query_lower))
+    has_android = bool(re.search(android_pattern, query_lower))
+    
+    if has_ios and not has_android:
+        return "app_store"
+    if has_android and not has_ios:
+        return "play_store"
+    return None
+
+
+def is_comparison_query(query: str) -> bool:
+    """
+    Check if query asks to compare across platforms or mentions both platform groups.
+    Keywords: compare, vs, versus, difference between, across platforms
+    OR presence of BOTH platform keyword groups in the same query.
+    """
+    query_lower = query.lower()
+    
+    ios_pattern = r'\b(?:ios|iphone|ipad|app\s*store|apple)\b'
+    android_pattern = r'\b(?:android|play\s*store|playstore|google\s*play)\b'
+    
+    has_ios = bool(re.search(ios_pattern, query_lower))
+    has_android = bool(re.search(android_pattern, query_lower))
+    
+    if has_ios and has_android:
+        return True
+        
+    comp_pattern = r'\b(?:compare|vs\.?|versus|difference\s+between|across\s+platforms|both\s+stores)\b'
+    if re.search(comp_pattern, query_lower):
+        return True
+        
+    return False
+
+
 async def retrieve_semantic_context(
     app_id: str,
     query: str,
@@ -234,6 +280,7 @@ async def retrieve_semantic_context(
     filter_max_version: str | None = None,
     filter_min_rating: int | None = None,
     filter_max_rating: int | None = None,
+    filter_platform: str | None = None,
 ) -> list[dict]:
     """Retrieve top K reviews via semantic vector search with metadata filters."""
     try:
@@ -273,13 +320,15 @@ async def retrieve_semantic_context(
             rpc_params["filter_min_rating"] = filter_min_rating
         if filter_max_rating is not None:
             rpc_params["filter_max_rating"] = filter_max_rating
+        if filter_platform is not None:
+            rpc_params["filter_platform"] = filter_platform
 
         resp = await db.rpc("match_reviews", rpc_params).execute()
         matched_reviews = resp.data or []
         scores_str = " | ".join(f"{r.get('similarity', 0):.3f}" for r in matched_reviews)
         logger.info(
-            "Vector search matched reviews | app_id=%s | query='%s' | matched=%d | threshold=%.2f | limit=%d",
-            app_id, query, len(matched_reviews), effective_threshold, effective_limit
+            "Vector search matched reviews | app_id=%s | query='%s' | matched=%d | threshold=%.2f | limit=%d | platform=%s",
+            app_id, query, len(matched_reviews), effective_threshold, effective_limit, filter_platform
         )
         logger.info("Similarity scores distribution: %s", scores_str)
         
@@ -337,20 +386,49 @@ async def run_hybrid_rag(app_id: str, query: str) -> dict:
         settings = get_settings()
         client = get_gemini_client()
 
-        # 1. Extract metadata filters — pure regex, zero latency
+        # 1. Extract metadata & platform filters — pure regex, zero latency
         filters = extract_metadata_filters(query)
-        logger.info("Extracted metadata filters | query='%s' | filters=%s", query, filters)
-
-        # 2. Retrieve contexts concurrently — both DB calls fire at the same time
-        trends_data, reviews_data = await asyncio.gather(
-            retrieve_trends_context(app_id),
-            retrieve_semantic_context(
-                app_id=app_id,
-                query=query,
-                limit=settings.rag_review_limit,
-                **filters,
-            ),
+        platform_filter = extract_platform_filter(query)
+        is_comparison = is_comparison_query(query)
+        
+        logger.info(
+            "Extracted metadata filters | query='%s' | filters=%s | platform=%s | is_comparison=%s",
+            query, filters, platform_filter, is_comparison
         )
+
+        # 2. Retrieve contexts concurrently — parallel DB calls
+        if is_comparison:
+            platform_limit = max(1, settings.rag_review_limit // 2)
+            trends_data, ios_reviews, play_reviews = await asyncio.gather(
+                retrieve_trends_context(app_id),
+                retrieve_semantic_context(
+                    app_id=app_id,
+                    query=query,
+                    limit=platform_limit,
+                    filter_platform="app_store",
+                    **filters,
+                ),
+                retrieve_semantic_context(
+                    app_id=app_id,
+                    query=query,
+                    limit=platform_limit,
+                    filter_platform="play_store",
+                    **filters,
+                ),
+            )
+            reviews_data = ios_reviews + play_reviews
+        else:
+            if platform_filter is not None:
+                filters["filter_platform"] = platform_filter
+            trends_data, reviews_data = await asyncio.gather(
+                retrieve_trends_context(app_id),
+                retrieve_semantic_context(
+                    app_id=app_id,
+                    query=query,
+                    limit=settings.rag_review_limit,
+                    **filters,
+                ),
+            )
 
         # 3. Format context string
         clean_reviews = [
