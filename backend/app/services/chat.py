@@ -363,11 +363,13 @@ async def run_hybrid_rag(app_id: str, query: str) -> dict:
             for r in reviews_data
         ]
 
+        sample_size = len(clean_reviews)
         trends_str = json.dumps(trends_data, indent=2)
         reviews_str = json.dumps(clean_reviews, indent=2)
 
         prompt = (
             f"Question: {query}\n\n"
+            f"Total Reviews Provided in Context: {sample_size}\n\n"
             f"Daily Rollups Context:\n{trends_str}\n\n"
             f"Reviews Context:\n{reviews_str}"
         )
@@ -375,7 +377,7 @@ async def run_hybrid_rag(app_id: str, query: str) -> dict:
         # 4. Gemini is still sync SDK — kept on thread, reuses singleton client
         logger.info(
             "Executing Gemini RAG | app_id=%s | reviews_sent_to_gemini=%d | prompt_length=%d",
-            app_id, len(clean_reviews), len(prompt)
+            app_id, sample_size, len(prompt)
         )
 
         def _generate():
@@ -391,7 +393,12 @@ async def run_hybrid_rag(app_id: str, query: str) -> dict:
         response = await asyncio.to_thread(_generate)
 
         # 5. Parse & return
-        return _parse_rag_response(response.text)
+        rag_result = _parse_rag_response(response.text)
+        if isinstance(rag_result, dict) and "metrics" in rag_result and isinstance(rag_result["metrics"], dict):
+            if sample_size > 0:
+                rag_result["metrics"]["sample_size"] = sample_size
+
+        return rag_result
 
     except Exception as e:
         error_msg = str(e)
