@@ -274,13 +274,15 @@ async def retrieve_semantic_context(
         if filter_max_rating is not None:
             rpc_params["filter_max_rating"] = filter_max_rating
 
-        resp = await db.rpc("match_reviews", rpc_params).execute()
+        matched_reviews = resp.data or []
+        scores_str = " | ".join(f"{r.get('similarity', 0):.3f}" for r in matched_reviews)
         logger.info(
             "Vector search matched reviews | app_id=%s | query='%s' | matched=%d | threshold=%.2f | limit=%d",
-            app_id, query, len(resp.data or []), effective_threshold, effective_limit
+            app_id, query, len(matched_reviews), effective_threshold, effective_limit
         )
+        logger.info("Similarity scores distribution: %s", scores_str)
         
-        return resp.data or []
+        return matched_reviews
 
     except Exception as e:
         logger.error("Failed to retrieve semantic vector context | error=%s", str(e), exc_info=True)
