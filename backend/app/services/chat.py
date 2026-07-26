@@ -373,7 +373,10 @@ async def run_hybrid_rag(app_id: str, query: str) -> dict:
         )
 
         # 4. Gemini is still sync SDK — kept on thread, reuses singleton client
-        logger.info("Executing Gemini RAG | prompt_length=%d", len(prompt))
+        logger.info(
+            "Executing Gemini RAG | app_id=%s | reviews_sent_to_gemini=%d | prompt_length=%d",
+            app_id, len(clean_reviews), len(prompt)
+        )
 
         def _generate():
             return client.models.generate_content(
